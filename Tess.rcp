@@ -1,0 +1,66 @@
+#include "TessRsc.h"
+
+APPLICATIONICONNAME ID 100 "Tess"
+APPLICATION         ID 1   "Tess"
+VERSION             ID 1   "0.1"
+
+form id MainForm at (0 0 160 160)
+menuid MainMenuBar 
+begin
+  title "Tesserae"
+  button "New Game" id MainFormNewButton at (97 2 50 10)
+  end
+
+MENU ID MainMenuBar
+BEGIN
+    PULLDOWN "Game"
+    BEGIN
+        MENUITEM "New"   		MainGameNew		"N"
+	MENUITEM "Instructions"		MainGameInstructions	"I"
+    END
+    PULLDOWN "Options"
+    BEGIN
+        MENUITEM "About" MainOptionsAbout
+    END
+END
+
+ALERT ID AboutAlert
+INFORMATION
+BEGIN
+    TITLE   "About Tesserae"
+    MESSAGE "Duckies.org Tesserae\n"\
+	    "Version 0.1"
+    BUTTONS "OK"
+END
+
+ALERT ID ErrorAlert
+INFORMATION
+BEGIN
+    TITLE   "Error"
+    MESSAGE "^1"
+    BUTTONS "OK"
+END
+
+alert id RomIncompatibleAlert
+error
+begin
+  title "System Incompatible"
+  message "System Version 3.0 or greater is required to run this application"
+  buttons "OK"
+end
+
+
+string id InstructionsStr
+  " Instructions\n"\
+  "\n"\
+  "Click and stuff\n"
+
+
+ALERT ID HeresTheInfo 
+INFORMATION
+BEGIN
+     TITLE "Here's the info"
+     MESSAGE "^1, ^2, ^3"
+     BUTTONS "OK" 
+END
+
