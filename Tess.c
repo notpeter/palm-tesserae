@@ -6,6 +6,7 @@
 **************************************************/
 #include <PalmOS.h>
 #include "TessRsc.h"
+#include "Tess.h"
 
 #define ROMVersionMinimum				0x03000000
 #define RomOS35						0x03500000
@@ -14,142 +15,188 @@
 #define TessCreatorID	'TeSS'
 #define TessPrefVers    0x0001
 
-typedef enum TessPrefID {
-  Pref_aGameStruct = 0x7000,
-  Pref_SquaresArray = 0x7001,
-  Pref_MovesArray = 0x7002
-} TessPreVersionNumber;
 
-typedef enum DifficultyType {
-  difficultyEasy = 1,
-  difficultyIntermediate,
-  difficultyMoreDifficult,
-  difficultyAdvanced,
-  difficultyImpossible
-} DifficultyType;
-
-#define defaultDifficulty difficultyEasy;
-
-#define WHITE	0x00FFFFFF
-#define RED	0x00FF0000
-#define BLUE 	0x000000FF
-#define YELLOW 	0x00FFFF00
-#define GREEN 	0x0000CC00
-#define PURPLE	0x00CC00CC
-#define ORANGE	0x00FFCC00
-#define GRAY	0x00999999
-//00000001 = Has +
-//00000010 = Has []
-//00000100 = Has O
-//Other combinations make sense (example 00000101 has [] and +)
-//00001000 = OnBoard (True if sqaure can hold a piece)
-
-//#define ATTRIBUTES_MASK 0x07
-//#define GETATTRIBUTES(x) (x & ATTRIBUTES_MASK)
-//#define ONBOARD_MASK 0x08
-//#define ONBOARD(x) (x & ONBOARD_MASK) >> 3
-#define ISPOWEROF2(x) (0 == (x&(x-1)))
-/* 
-8 =  0100
-7 =  0011
-17= 10001
-16= 10000
-16 >> 3
-  = 00100
-*/
-//typedef UInt8 Square;
-typedef struct Square {
-  unsigned onBoard	: 1;	//Is the tile on the board
-  unsigned attributes	: 3;	//The attributes
-} Square;
-
-#define MAX_SIZE_WIDTH 25 //definite max
-#define MAX_SIZE_HEIGHT 25 //definite max
-
-//Universal Settings associated with any game (can be used in conjunction
-//with the tiles and the moves for a game to recreate the game as it was played
-//previously.
-typedef struct GameSettings {
-  //This was the seed used to generate this game
-  UInt16 width;
-  UInt16 height;
-  //You only actually need a pointer cause you can use the recover handle
-  //functions to get the handle when it is needed for resizing/freeing memory 
-  UInt8 skillLevel;
-  Square *board;
-  //Show possible moves
-  Boolean showPossible;
-} GameSettings;
-
-typedef struct Board {
-  GameSettings g;
-  //You only actually need a pointer cause you can use the recover handle
-  //functions to get the handle when it is needed for resizing/freeing memory 
-  UInt16 size;
-  UInt16 squareWidth;
-  UInt16 squareHeight;
-  RectangleType rect;
-  Int16 pieceSelected;
-  Int32 blinkRate;
-  Int32 timeToBlink;
-  Boolean blinking;
-  Boolean blinkOn;
-} Board;
-
-typedef struct Move {
-  UInt16 from : 10;
-  UInt16 over : 10;
-  UInt16 to   : 10;
-  Square src;
-  Square mid;
-  Square dest;
-} Move;
-
-typedef struct aGame {
-  //You only actually need a pointer cause you can use the recover handle
-  //functions to get the handle when it is needed for resizing/freeing memory
-  Board theBoard;
-  Move *moves;
-  UInt16 numMoves;
-} aGame;
-
-//Preferences must include:
-//An Array of type Move of moves
-//An aGame structure (with all the board settings)
-//An Array of Squares that fill the board.
-
-//Begin GLobal Variables
-//Think binary counting here. the third color is 1 + 2;
-static const UInt32 colorsHex[8] = {WHITE,YELLOW,BLUE,GREEN,RED,
-				    ORANGE,PURPLE,GRAY};
-//colors for each of the possible tiles.
-static IndexedColorType colors[8];
-static aGame Game;
-//True when the preferences have been modified.
-static Boolean prefsTouched = 0;
-//temporary preferences variables
-static struct {
-  UInt8 Height;
-  UInt8 Width;
-} tempPreferences;
+static void DrawBox(Board *b, UInt16 index, Boolean Round) {
+  UInt8 j, k = 0;
+  //FrameBitsType frameBits;
+  RectangleType r;
+  PointType p;
+  
+  if (b->squareWidth >= b->squareHeight) {
+    j = ((b->squareHeight / 4) + 1);
+  }
+  else {
+    j = ((b->squareWidth / 4) + 1);
+  }
 
 
-//static DmOpenRef TessDB;
-static struct {
-  UInt32 RomVersion;
-  UInt32 ScreenWidth;
-  UInt32 ScreenHeight;
-  UInt16 ScreenHeader;
-  UInt16 ScreenBorder;
-  UInt16 MinimumPixelSize;
-  UInt16 MinWidth;
-  UInt16 MinHeight;
-  UInt16 MaxWidth;
-  UInt16 MaxHeight;
-  Boolean Color;
-} DeviceSettings;
-//End Global Variables
+  p = GetXY(b, index);
+  r.topLeft.x = b->rect.topLeft.x + ((b->squareWidth+1) * p.x);
+  r.topLeft.y = b->rect.topLeft.y + ((b->squareHeight+1) * p.y);
+  r.extent.x = (b->squareWidth);
+  r.extent.y = (b->squareHeight);
+  //Palm says FrameBitsType doesn't have a garunteed structure
+  //So I don't know if this will work in future revisions.
+  //frameBits.word = rectangleFrame;
+  
+  r.topLeft.x += j;
+  r.topLeft.y += j;
+  r.extent.x  -= (j * 2);
+  r.extent.y  -= (j * 2);
+  //frameBits.bits.cornerDiam = (r.extent.x /2) +1;
+  //frameBits.bits.width = 1;
 
+  if (Round)
+    k = (r.extent.x / 2);
+
+  //k here can never fully round out the corner cause of how it is defined.
+  //Redo this to fix it.
+  WinDrawRectangle(&r, k);
+  //WinDrawRectangleFrame(frameBits, &r);
+  //b->g.board[pieceSelected]
+}
+
+//assumes coordinates are already correct
+static Boolean isValidMove(Board *b, UInt16 src, UInt16 mid, UInt16 dest) {
+  if ((b->g.board[src].attributes &&
+       b->g.board[mid].attributes) &&
+      //And either the src and the middle are primaries.
+      ((((ISPOWEROF2(b->g.board[src].attributes)) &&
+	 (ISPOWEROF2(b->g.board[mid].attributes))) ||
+	//Or the mid contains everything that is in the src
+	((b->g.board[src].attributes & b->g.board[mid].attributes) == b->g.board[src].attributes)) &&
+       //And either the src and dest are the same
+       ((b->g.board[src].attributes == b->g.board[dest].attributes) ||
+	//or the destination has nothing that the source does
+	((b->g.board[src].attributes & b->g.board[dest].attributes) == 0)))) {
+    return true;
+  }
+  else
+    return false;
+}
+
+static daMoves validMoves(aGame *g, UInt16 index) {
+  Board *b = &(g->theBoard);
+  daMoves l; //what moves are legal;
+  
+  UInt16 src = index, mid, dest;
+
+  l.byte = 0xFF; //Starts with all moves are possible.
+
+  //If it is not on the board, or if the space is empty. no valid moves.
+  if (!(b->g.board[index].onBoard &&
+	b->g.board[index].attributes)) {
+    daMoves g;
+    g.byte = 0;
+    return g;
+  }
+  //in the first two rows -- no n, ne, nw
+  if ((index / b->g.width) < 2)
+    l.d.nn = l.d.ne = l.d.nw = 0;
+  //in the last two rows -- no sw, s, se
+  if ((index / b->g.width) > b->g.height - 2)
+    l.d.sw = l.d.ss = l.d.se = 0;
+  //in first two columns -- no nw, w, sw
+  if ((index % b->g.width) < 2)
+    l.d.nw = l.d.ww = l.d.sw = 0;
+  //in the last two columns -- no se, e, ne
+  if ((index % b->g.width) > b->g.width - 2)
+    l.d.se = l.d.ee = l.d.ne = 0;
+
+  if (l.d.nn) {
+    mid = src - b->g.width;
+    dest = (src - (b->g.width * 2));
+    l.d.nn = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.ne) {
+    mid = (src - b->g.width) + 1;
+    dest = (src - (b->g.width * 2)) + 2;
+    l.d.ne = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.ee) {
+    mid = src + 1;
+    dest = src + 2;
+    l.d.ee = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.se) {
+    mid = (src + b->g.width) + 1;
+    dest = (src + (b->g.width * 2)) + 2;
+    l.d.se = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.ss) {
+    mid = src + b->g.width;
+    dest = (src + (b->g.width * 2));
+    l.d.ss = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.sw) {
+    mid = (src + b->g.width) - 1;
+    dest = (src + (b->g.width * 2)) - 2;
+    l.d.sw = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.ww) {
+    mid = src - 1;
+    dest = src - 2;
+    l.d.ww = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.nw) {
+    mid = (src - b->g.width) - 1;
+    dest = (src - (b->g.width * 2)) - 2;
+    l.d.nw = isValidMove(b, src, mid, dest);
+  }
+  return l;
+}
+static Boolean anyValidMoves(aGame *g) {
+  UInt16 i;
+  for (i=0; i < g->theBoard.size; i++)
+    if ((validMoves(g, i)).byte)
+      return 1;
+  return 0;
+}
+//The erase flag toggles whether the function is erasing or drawing.
+static void DrawPossibilities(Board *b, daMoves l, UInt16 boardIndex,
+			     Boolean erase) {
+  //Fix this so it draws circles, squares or something else depending on
+  //what the resulting peice will be.
+
+  DrawBox(b, boardIndex, true);
+  if (l.d.nn) {
+    DrawBox(b, (boardIndex - (b->g.width * 2)), true);
+  }
+  if (l.d.ne) {
+    DrawBox(b, (boardIndex - (b->g.width * 2)) + 2, true);
+  }
+  if (l.d.ee) {
+    DrawBox(b, boardIndex + 2, true);
+  }
+  if (l.d.se) {
+    DrawBox(b, (boardIndex + (b->g.width * 2)) + 2, true);
+  }
+  if (l.d.ss) {
+    DrawBox(b, boardIndex + (b->g.width * 2), true);
+  }
+  if (l.d.sw) {
+    DrawBox(b, boardIndex + (b->g.width * 2) - 2, true);
+  }
+  if (l.d.ww) {
+    DrawBox(b, boardIndex - 2, true);
+  }
+  if (l.d.nw) {
+    DrawBox(b, (boardIndex - (b->g.width * 2)) - 2, true);
+  }
+  //Square s = b->g.board[boardIndex];
+  /*if (ISPOWEROF2(s.attributes)) {
+    //Draw a circle
+    DrawBox(b, boardIndex, true);
+  }
+  else {
+    //Draw a square
+    DrawBox(b, boardIndex, false);
+    }*/
+}
+static void DrawPossibleMoves(aGame *g, UInt16 index) {
+  daMoves f = validMoves(g, index);
+  DrawPossibilities(&(g->theBoard), f, index, false);
+}
 static void updateMoveCounterDisplay(UInt32 numMoves) {
   FormType *frm = FrmGetActiveForm();
   Char numMovesStr[maxStrIToALen];
@@ -384,8 +431,7 @@ static Int16 GetIndex(Board *b, UInt8 x, UInt8 y) {
     return -1;
 }
 
-
-static PointType GetXY(Board *b, UInt16 Index) {
+PointType GetXY(Board *b, UInt16 Index) {
   PointType p;
   if (Index < b->size && Index >= 0) {
     p.x = (Index % b->g.width);
@@ -513,45 +559,6 @@ static void DrawALoc(Board *b, UInt16 loc){
   WinEraseRectangle(&r, 0);
   DrawOneSquare(b, r.topLeft, s);
 }
-static void DrawBox(Board *b, UInt16 index, Boolean Round) {
-  UInt8 j, k = 0;
-  //FrameBitsType frameBits;
-  RectangleType r;
-  PointType p;
-  
-  if (b->squareWidth >= b->squareHeight) {
-    j = ((b->squareHeight / 4) + 1);
-  }
-  else {
-    j = ((b->squareWidth / 4) + 1);
-  }
-
-
-  p = GetXY(b, index);
-  r.topLeft.x = b->rect.topLeft.x + ((b->squareWidth+1) * p.x);
-  r.topLeft.y = b->rect.topLeft.y + ((b->squareHeight+1) * p.y);
-  r.extent.x = (b->squareWidth);
-  r.extent.y = (b->squareHeight);
-  //Palm says FrameBitsType doesn't have a garunteed structure
-  //So I don't know if this will work in future revisions.
-  //frameBits.word = rectangleFrame;
-  
-  r.topLeft.x += j;
-  r.topLeft.y += j;
-  r.extent.x  -= (j * 2);
-  r.extent.y  -= (j * 2);
-  //frameBits.bits.cornerDiam = (r.extent.x /2) +1;
-  //frameBits.bits.width = 1;
-
-  if (Round)
-    k = (r.extent.x / 2);
-
-  //k here can never fully round out the corner cause of how it is defined.
-  //Redo this to fix it.
-  WinDrawRectangle(&r, k);
-  //WinDrawRectangleFrame(frameBits, &r);
-  //b->g.board[pieceSelected]
-}
 static void DrawSelection(Board *b, UInt16 boardIndex) {
   Square s = b->g.board[boardIndex];
   if (boardIndex != b->pieceSelected) {
@@ -657,116 +664,6 @@ static void MoveUndo(aGame *g, Int16 count) {
   DrawALoc(b, m.to);
 }
 
-typedef union daMoves {
-  UInt8 byte;
-  struct d {
-    unsigned nn: 1;
-    unsigned ne: 1;
-    unsigned ee: 1;
-    unsigned se: 1;
-    unsigned ss: 1;
-    unsigned sw: 1;
-    unsigned ww: 1;
-    unsigned nw: 1;
-    } d;
-} daMoves;
-
-//assumes coordinates are already correct
-static Boolean isValidMove(Board *b, UInt16 src, UInt16 mid, UInt16 dest) {
-  if ((b->g.board[src].attributes &&
-       b->g.board[mid].attributes) &&
-      //And either the src and the middle are primaries.
-      ((((ISPOWEROF2(b->g.board[src].attributes)) &&
-	 (ISPOWEROF2(b->g.board[mid].attributes))) ||
-	//Or the mid contains everything that is in the src
-	((b->g.board[src].attributes & b->g.board[mid].attributes) == b->g.board[src].attributes)) &&
-       //And either the src and dest are the same
-	   ((b->g.board[src].attributes == b->g.board[dest].attributes) ||
-	    //or the destination has nothing that the source does
-	    ((b->g.board[src].attributes & b->g.board[dest].attributes) == 0)))) {
-    return true;
-  }
-  else
-    return false;
-}
-
-static daMoves validMoves(aGame *g, UInt16 index) {
-  Board *b = &(g->theBoard);
-  daMoves l; //what moves are legal;
-  
-  UInt16 src = index, mid, dest;
-
-  l.byte = 0xFF; //Starts with all moves are possible.
-
-  //If it is not on the board, or if the space is empty. no valid moves.
-  if (!(b->g.board[index].onBoard &&
-	b->g.board[index].attributes)) {
-    daMoves g;
-    g.byte = 0;
-    return g;
-  }
-  //in the first two rows -- no n, ne, nw
-  if ((index / b->g.width) < 2)
-    l.d.nn = l.d.ne = l.d.nw = 0;
-  //in first two columns -- no nw, w, sw
-  if ((index % b->g.height) < 2)
-    l.d.nw = l.d.ww = l.d.sw = 0;
-  //in the last two rows -- no sw, s, se
-  if ((index / b->g.width) > b->g.height - 3)
-    l.d.sw = l.d.ss = l.d.se = 0;
-  //in the last two columns -- no se, e, ne
-  if ((index % b->g.height) > b->g.width - 3)
-    l.d.se = l.d.ee = l.d.ne = 0;
-
-  if (l.d.nn) {
-    mid = src - b->g.width;
-    dest = (src - (b->g.width * 2));
-    l.d.nn = isValidMove(b, src, mid, dest);
-  }
-  if (l.d.ne) {
-    mid = (src - b->g.width) + 1;
-    dest = (src - (b->g.width * 2)) + 2;
-    l.d.ne = isValidMove(b, src, mid, dest);
-  }
-  if (l.d.ee) {
-    mid = src + 1;
-    dest = src + 2;
-    l.d.ee = isValidMove(b, src, mid, dest);
-  }
-  if (l.d.se) {
-    mid = (src + b->g.width) + 1;
-    dest = (src + (b->g.width * 2)) + 2;
-    l.d.se = isValidMove(b, src, mid, dest);
-  }
-  if (l.d.ss) {
-    mid = src + b->g.width;
-    dest = (src + (b->g.width * 2));
-    l.d.ss = isValidMove(b, src, mid, dest);
-  }
-  if (l.d.sw) {
-    mid = (src + b->g.width) - 1;
-    dest = (src + (b->g.width * 2)) - 2;
-    l.d.sw = isValidMove(b, src, mid, dest);
-  }
-  if (l.d.ww) {
-    mid = src - 1;
-    dest = src - 2;
-    l.d.ww = isValidMove(b, src, mid, dest);
-  }
-  if (l.d.nw) {
-    mid = (src - b->g.width) - 1;
-    dest = (src - (b->g.width * 2)) - 2;
-    l.d.nw = isValidMove(b, src, mid, dest);
-  }
-  return l;
-}
-static Boolean anyValidMoves(aGame *g) {
-  UInt16 i;
-  for (i=0; i < g->theBoard.size; i++)
-    if ((validMoves(g, i)).byte)
-      return 1;
-  return 0;
-}
 static Boolean move(aGame *g, UInt16 src, UInt16 dest) {
   Board *b = &(g->theBoard);
   UInt16 mid;
@@ -1173,6 +1070,10 @@ static Boolean MainFormHandleEvent(EventPtr event)
 	  DrawSelection(&Game.theBoard, boardIndex);
 	  //DrawBox(&Game.theBoard, boardIndex, false);
 	  Game.theBoard.pieceSelected = boardIndex;
+	  //if (Game.theBoard.g.showPossible) {
+	  if (true) {
+	    DrawPossibleMoves(&Game, boardIndex);
+	  }
 	}
       }
       //If the same piece has been clicked again, deselect that piece
@@ -1180,6 +1081,8 @@ static Boolean MainFormHandleEvent(EventPtr event)
 	DrawSelection(&Game.theBoard, boardIndex);
 	//DrawBox(&Game.theBoard, boardIndex, false);
 	Game.theBoard.pieceSelected = -1;
+	//This is a little excessive (an entire redraw), but it works now..
+	DrawSquares(&Game.theBoard);
       }
       else {
 	DrawSelection(&Game.theBoard, Game.theBoard.pieceSelected);
@@ -1195,6 +1098,7 @@ static Boolean MainFormHandleEvent(EventPtr event)
 	    }
 	  }
 	}
+	DrawSquares(&Game.theBoard);
       }
       handled = true;
     }
