@@ -7,10 +7,20 @@
 #include <PalmOS.h>
 #include "TessRsc.h"
 
+#define ROMVersionMinimum				0x02000000
+#define RomOS35						0x03500000
 #define LEVEL_BEGINNER 1
 #define LEVEL_INTERMEDIATE 2
 #define LEVEL_ADVANCED 3
 
+#define WHITE	0x00FFFFFF
+#define RED	0x00FF0000
+#define BLUE 	0x000000FF
+#define YELLOW 	0x00FFFF00
+#define GREEN 	0x00008000
+#define PURPLE	0x00800080
+#define ORANGE	0x00FF9900
+#define GRAY	0x00999999
 //00000001 = Has +
 //00000010 = Has []
 //00000100 = Has O
@@ -44,14 +54,20 @@ typedef struct Board {
 
 //Begin GLobal Variables
 static Board bb;
+//Think binary counting here. the fourth 
+static const UInt32 colorsHex[8] = {WHITE,YELLOW,BLUE,GREEN,RED,ORANGE,PURPLE,GRAY};
+//colors for each of the possible tiles.
+static IndexedColorType colors[8];
 static struct {
-  UInt16 ScreenWidth;
-  UInt16 ScreenHeight;
+  UInt32 RomVersion;
+  UInt32 ScreenWidth;
+  UInt32 ScreenHeight;
   UInt16 ScreenHeader;
   UInt16 ScreenBorder;
   UInt16 MinimumPixelSize;
   UInt16 MaxWidth;
   UInt16 MaxHeight;
+  Boolean Color;
 } DeviceSettings;
 //End Global Variables
 
@@ -230,12 +246,19 @@ static void DrawSquareInRect(RectangleType r) {
   WinDrawRectangleFrame(frame, &r);
 }
 static void DrawOneSquare(Board *b, PointType p, Square s) {
-  RectangleType r;
+  RectangleType color, r;
+  IndexedColorType oldBGIndex;
   //The +1 and -3 keep it within the bounds of the rectangle.
   r.topLeft.x = p.x +2;
   r.topLeft.y = p.y +2;
   r.extent.x = b->squareWidth -5;
   r.extent.y = b->squareHeight -5;
+  color.topLeft = p;
+  color.extent.x = b->squareWidth;
+  color.extent.y = b->squareHeight; 
+  oldBGIndex = WinSetBackColor(colors[(GETATTRIBUTES(s))]);
+  WinEraseRectangle(&color, 0);
+  WinSetBackColor(oldBGIndex);
   if ((s >> 0) %2) {    
     DrawPlusInRect(r);
   }
@@ -367,10 +390,11 @@ static Boolean move(Board *b, UInt16 src, UInt16 dest) {
     newMid = GETATTRIBUTES(b->board[mid]);
     newDest = GETATTRIBUTES(b->board[dest]);
     
-    if ((((ISPOWEROF2(newSrc)) &&
-	 (ISPOWEROF2(newMid))) ||
-	((newSrc & newMid) == newSrc)) &&
-	((newSrc == newDest) || ((newSrc & newDest) == 0))) {
+    if ((newMid) &&
+		   ((((ISPOWEROF2(newSrc)) &&
+		      (ISPOWEROF2(newMid))) ||
+		     ((newSrc & newMid) == newSrc)) &&
+		    ((newSrc == newDest) || ((newSrc & newDest) == 0)))) {
     
       newMid = (ONBOARD_MASK |
 		(((ISPOWEROF2(newSrc)) && (ISPOWEROF2(newMid))) ? 0 :
@@ -402,8 +426,44 @@ static void newGame() {
   DrawSquares(&bb);
 }
 
+static RGBColorType ColorHexToRGB(Int32 hex) {
+  RGBColorType rgb;
+  rgb.r = ((hex & 0x00FF0000) >> 16);
+  rgb.g = ((hex & 0x0000FF00) >> 8);
+  rgb.b = ((hex & 0x000000FF) >> 0);
+  rgb.index = WinRGBToIndex(&rgb);
+  return rgb;
+}
+
+static void setupColors() {
+  UInt8 i;
+  for (i = 0; i < 8; i++) {
+    colors[i] = ColorHexToRGB(colorsHex[i]).index;
+  }
+}
+
 static void setupDeviceSettings() {
-  DeviceSettings.ScreenWidth = 160;
+  //For 8bit color...
+  UInt32 ColorDepths, ColorDrawMode = 8;
+  //For 16bit color (not needed):
+  //ColorDrawMode = 16;
+  
+  if (DeviceSettings.RomVersion >= RomOS35)
+    WinPushDrawState();
+  WinScreenMode(winScreenModeGet, &DeviceSettings.ScreenWidth,
+		&DeviceSettings.ScreenHeight, &ColorDepths,
+		NULL);
+  if (ColorDrawMode & ColorDepths) {
+    // Change color depth and refresh the screen.
+    WinScreenMode(winScreenModeSet, NULL, NULL, &ColorDrawMode, NULL);
+    DeviceSettings.Color = true;
+    FrmUpdateForm(MainForm, frmRedrawUpdateCode);
+    setupColors();
+  }
+  else {
+    DeviceSettings.Color = false;
+  }
+
   DeviceSettings.ScreenHeight = 160;
   DeviceSettings.ScreenHeader = 15;
   DeviceSettings.ScreenBorder = 3;
@@ -417,7 +477,31 @@ static void setupDeviceSettings() {
 			     DeviceSettings.MinimumPixelSize);
 }
 
-static Err StartApplication(void) {
+//Stolen from the palm SDK examples.
+static Err RomVersionCompatible (UInt32 requiredVersion, UInt16 launchFlags) {
+  // See if we're on in minimum required version of the ROM or later.
+  FtrGet(sysFtrCreator, sysFtrNumROMVersion, &DeviceSettings.RomVersion);
+  if (DeviceSettings.RomVersion < requiredVersion) {
+    if ((launchFlags & (sysAppLaunchFlagNewGlobals | sysAppLaunchFlagUIApp)) ==
+	(sysAppLaunchFlagNewGlobals | sysAppLaunchFlagUIApp)) {
+      FrmAlert (RomIncompatibleAlert);
+      
+      // Pilot 1.0 will continuously relaunch this app unless we switch to 
+      // another safe one.
+      if (DeviceSettings.RomVersion < 0x02000000) {
+	AppLaunchWithCommand(sysFileCDefaultApp,
+			     sysAppLaunchCmdNormalLaunch, NULL);
+      }
+    }
+    return (sysErrRomIncompatible);
+  }
+  return (0);
+}
+
+static Err StartApplication(UInt16 launchFlags) {
+  Err  err;
+  err = RomVersionCompatible (ROMVersionMinimum, launchFlags);
+  if (err) return (err);
   setupDeviceSettings();
   FrmGotoForm(MainForm);
   return 0;
@@ -426,6 +510,8 @@ static Err StartApplication(void) {
 
 static void StopApplication(void) {
   FreeBoard(&bb);
+  if (DeviceSettings.RomVersion >= RomOS35)
+    WinPopDrawState();
   FrmCloseAllForms();
 }
 
@@ -537,11 +623,9 @@ static Boolean ApplicationHandleEvent(EventPtr event)
   return handled;
 }
 
-static void EventLoop(void)
-{
+static void EventLoop(void) {
   EventType  event;
   UInt16     error;
-  
   
   do {
     EvtGetEvent(&event, evtWaitForever);
@@ -554,13 +638,12 @@ static void EventLoop(void)
 }
 
 UInt32 PilotMain(UInt16 launchCode, MemPtr cmdPBP,
-                 UInt16 launchFlags)
-{
+                 UInt16 launchFlags) {
   Err  err;
   
   switch (launchCode) {
   case sysAppLaunchCmdNormalLaunch:
-    if ((err = StartApplication()) == 0) {
+    if ((err = StartApplication(launchFlags)) == 0) {
       EventLoop();
       StopApplication();
     }

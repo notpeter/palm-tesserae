@@ -63,4 +63,3 @@ BEGIN
      MESSAGE "^1, ^2, ^3"
      BUTTONS "OK" 
 END
-
