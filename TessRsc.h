@@ -4,6 +4,7 @@
 
 #define MainFormNewButton	2000
 #define MainFormRDButton	2003
+#define MainFormUDButton	2004
 #define	PreferencesOKButton	2001
 #define	PreferencesCancelButton	2002
 // Menubar

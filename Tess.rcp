@@ -9,8 +9,9 @@ form id MainForm at (0 0 160 160)
 menuid MainMenuBar 
 begin
   title "Tesserae"
-  button "RD" id MainFormRDButton at (67 2 20 10)
-  button "New Game" id MainFormNewButton at (97 2 50 10)
+  button "RD" id MainFormRDButton at (57 2 19 10)
+  button "UD" id MainFormUDButton at (82 2 19 10)
+  button "New Game" id MainFormNewButton at (107 2 50 10)
 end
 
 MENU ID MainMenuBar

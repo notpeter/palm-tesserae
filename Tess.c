@@ -91,15 +91,19 @@ typedef struct Board {
 } Board;
 
 typedef struct Move {
-  UInt16 from : 8;
-  UInt16 to   : 8;
+  UInt16 from : 10;
+  UInt16 over : 10;
+  UInt16 to   : 10;
+  Square src;
+  Square mid;
+  Square dest;
 } Move;
 
 typedef struct aGame {
   //You only actually need a pointer cause you can use the recover handle
   //functions to get the handle when it is needed for resizing/freeing memory
   Board theBoard;
-  //Move *moves;
+  Move *moves;
   UInt16 numMoves;
 } aGame;
 
@@ -132,7 +136,6 @@ static struct {
 } DeviceSettings;
 //End Global Variables
 
-/*
 static void MovePushMove(aGame *g, Move m) {
   MemHandle h = MemPtrRecoverHandle(g->moves);
   if (g->numMoves >= (MemHandleSize(h) / sizeof(Move))) {
@@ -150,25 +153,25 @@ static void MovePopMove(aGame *g, Move *m) {
     //Empty Stack!
     return;
   }
-  else if ((g->numMoves + 8) < (MemHandleSize(h) / sizeof(Move))) {
+  /*else if (g->numMoves + 8) < (MemHandleSize(h) / sizeof(Move))) {
     MemHandleUnlock(h);
     MemHandleResize(h, sizeof(Move) * (g->numMoves - 8));
     g->numMoves -= 8;
     g->moves = MemHandleLock(h);
-  }
+    }*/
   g->numMoves--;
-  *m = g->moves[g->numMoves - 2];
+  *m = g->moves[g->numMoves];
 }
 
+
 static void MoveGetMove(aGame *g, Move *m, UInt16 pos) {
-  //MemHandle h = MemPtrRecoverHandle(g->moves);
   if (pos >= g->numMoves) {
     //Bad Position!
     return;
   }
   *m = g->moves[pos];
 }
-*/
+
 static UInt16 RandomNum(UInt16 n) {
   //this is ghetto, but fixes divide by zero issues should they arise.
 
@@ -290,15 +293,15 @@ static aGame GetSavedGame() {
 			      ag.theBoard.g.board, &boardSize,
 			      unsaved) != noPreferenceFound) {
       
-      //movesSize = sizeof(ag.numMoves * sizeof(Move)) + 1;
-      //ag.moves = MemHandleLock(MemHandleNew(movesSize));
-      //if (PrefGetAppPreferences(TessCreatorID, Pref_MovesArray,
-      //			&ag.moves, &movesSize,
-      //			unsaved) != noPreferenceFound) {
-      return ag;
-      //}
-      //Insert the proper unlocks so that there is no memory leak;
-      //MemHandleUnlock(MemPtrRecoverHandle(ag.moves));
+      movesSize = (ag.numMoves * sizeof(Move) +1);
+      ag.moves = MemHandleLock(MemHandleNew(movesSize));
+      MemSet(ag.moves, movesSize, 0x00);
+      if (PrefGetAppPreferences(TessCreatorID, Pref_MovesArray,
+				ag.moves, &movesSize,
+				unsaved) != noPreferenceFound) {
+	return ag;
+      }
+      MemHandleUnlock(MemPtrRecoverHandle(ag.moves));
     }
     MemHandleUnlock(MemPtrRecoverHandle(ag.theBoard.g.board));
   }
@@ -315,8 +318,8 @@ static aGame GetSavedGame() {
   ag.theBoard.blinkOn = false;
   
   FillBoardRandom(&ag.theBoard.g);
-  //ag.moves = MemHandleLock(MemHandleNew(8 * sizeof(Move)));
-  //MemSet(ag.moves, (8 * sizeof(Move)), 0x00);
+  ag.moves = MemHandleLock(MemHandleNew(movesSize));
+  MemSet(ag.moves, movesSize, 0x00);
 
   return ag;
 }
@@ -332,19 +335,21 @@ static void StoreSavedGame(aGame ag) {
   PrefSetAppPreferences(TessCreatorID, Pref_SquaresArray,
 			TessPrefVers, ag.theBoard.g.board,
 			boardSize, unsaved);
-//movesSize = sizeof(ag.numMoves * sizeof(Move));
-//PrefSetAppPreferences(TessCreatorID, Pref_MovesArray,
-//		TessPrefVers, &ag.moves,
-//		movesSize, unsaved);
-//if (ag.moves) {
-//  h1 = MemPtrRecoverHandle(ag.moves);
-//if (h1)
-//  MemHandleUnlock(h1);
-//  }
+  movesSize = ag.numMoves * sizeof(Move);
+  PrefSetAppPreferences(TessCreatorID, Pref_MovesArray,
+			TessPrefVers, ag.moves,
+			movesSize, unsaved);
+  if (ag.moves) {
+    h1 = MemPtrRecoverHandle(ag.moves);
+    if (h1)
+      MemHandleUnlock(h1);
+      MemHandleFree(h1);
+  }
   if (ag.theBoard.g.board) {
     h2 = MemPtrRecoverHandle(ag.theBoard.g.board);
     if (h2)
       MemHandleUnlock(h2);
+      MemHandleFree(h2);
   }
 }
 
@@ -394,13 +399,14 @@ static UInt16 ScreenCoordToBoardIndex(Board *b, Coord x, Coord y) {
 //Was more useful when I used a handle for the board within board,
 //but now its just a static array.
 static void FreeBoard(Board *b) {
-  //if (b->size) {
-    //if (MemPtrRecoverHandle(b->g.board)) {
-      MemHandleFree(MemPtrRecoverHandle(b->g.board));
-      //Clear any other contents so it won't be used again.
-      //MemSet(b, sizeof(Board), 0x00);
-      //}
-      //}
+  MemHandle h2;
+  if (b->g.board) {
+    h2 = MemPtrRecoverHandle(b->g.board);
+    if (h2)
+      MemHandleUnlock(h2);
+      MemHandleFree(h2);
+  }
+  //MemHandleFree(MemPtrRecoverHandle(b->g.board));
 }
 
 
@@ -595,7 +601,30 @@ static Boolean checkSquares(PointType p1, PointType p2) {
   return positions;
 }
 
-static Boolean move(Board *b, UInt16 src, UInt16 dest) {
+//Undo X Moves (-1 = all moves)
+static void MoveUndo(aGame *g, Int16 count) {
+  Board *b = &(g->theBoard);
+  Move m;
+  Int16 i;
+  if (g->numMoves == 0)
+    return;
+  else if (count == -1)
+    count = g->numMoves;
+
+  for (i = 0; i < count; i++) {
+    MovePopMove(g, &m);
+    b->g.board[m.from] = m.src;
+    b->g.board[m.over] = m.mid;
+    b->g.board[m.to] = m.dest;
+  }
+  DrawALoc(b, m.from);
+  DrawALoc(b, m.over);
+  DrawALoc(b, m.to);
+}
+
+//static Boolean move(Board *b, UInt16 src, UInt16 dest) {
+static Boolean move(aGame *g, UInt16 src, UInt16 dest) {
+  Board *b = &(g->theBoard);
   UInt16 mid;
   Square newSrc, newMid, newDest;
   PointType srcPt, midPt, destPt;
@@ -631,7 +660,17 @@ static Boolean move(Board *b, UInt16 src, UInt16 dest) {
 			     (newMid.attributes & (~newSrc.attributes)));
 	newDest.attributes = (newSrc.attributes | newDest.attributes);
 	newSrc.attributes = 0;
-	
+	{
+	  Move m;
+	  m.from = src;
+	  m.over = mid;
+	  m.to = dest;
+	  m.src = b->g.board[src];
+	  m.mid = b->g.board[mid];
+	  m.dest = b->g.board[dest];
+	  
+	  MovePushMove(&Game, m);
+	}
 	b->g.board[src].attributes = newSrc.attributes;
 	b->g.board[mid].attributes = newMid.attributes;
 	b->g.board[dest].attributes = newDest.attributes;
@@ -657,6 +696,7 @@ static void newGame() {
   Game.theBoard.g.skillLevel = difficultyEasy;
   FillBoardRandom(&Game.theBoard.g);
   DrawSquares(&Game.theBoard);
+  Game.numMoves = 0;
 }
 
 static RGBColorType ColorHexToRGB(Int32 hex) {
@@ -758,8 +798,7 @@ static Err StartApplication(UInt16 launchFlags) {
 
 static void StopApplication(void) {
   StoreSavedGame(Game);
-  //This isn't needed, StoreSavedGame unlocks the necessary handles
-  FreeBoard(&Game.theBoard);
+  //FreeBoard(&Game.theBoard);
   //DmCloseDatabase(TessDB);
   if (DeviceSettings.RomVersion >= RomOS35)
     WinPopDrawState();
@@ -829,9 +868,15 @@ static Boolean MainFormHandleEvent(EventPtr event)
       newGame();
       handled = true;
       break;
+    //Redraw
     case MainFormRDButton:
       //Game.skillLevel = difficultyIntermediate;
       DrawSquares(&Game.theBoard);
+      handled = true;
+      break;
+    //Undo
+    case MainFormUDButton:
+      MoveUndo(&Game, 1);
       handled = true;
       break;
     default:
@@ -858,9 +903,7 @@ static Boolean MainFormHandleEvent(EventPtr event)
       else {
 	DrawSelection(&Game.theBoard, Game.theBoard.pieceSelected);
 	//DrawBox(&Game.theBoard, Game.theBoard.pieceSelected, false);
-	if (move(&Game.theBoard, Game.theBoard.pieceSelected, boardIndex)) {
-	  //DrawBox(&Game.theBoard, boardIndex);
-	  
+	if (move(&Game, Game.theBoard.pieceSelected, boardIndex)) {
 	  Game.theBoard.pieceSelected = -1;
 	}
       }
