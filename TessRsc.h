@@ -10,6 +10,7 @@
 #define MainFormNewButton	2000
 #define MainFormRDButton	2003
 #define MainFormUDButton	2004
+#define MainFormMovesLabel	2005
 #define	PreferencesOKButton	2001
 #define	PreferencesCancelButton	2002
 // Menubar
@@ -39,6 +40,7 @@
 #define	WidthTrigger		6004
 #define	WidthList		6005
 
+
 #define HeightRightArrow	6006
 
 #define	BoardEditOKButton	6101
@@ -46,17 +48,21 @@
 
 #define	HeightUpArrow		6103
 #define	HeightDownArrow		6104
-
-//Warning! Do not use IDs > 9000 (that's where PilRC's AUTOID elements start)
+#define HeightField		6105
+#define WidthDownArrow		6106
+#define WidthUpArrow		6107
+#define WidthField		6108
 
 
 //Non Resource ID Constants (Only used for preprocessing)
 //Alignment of colon (on right side of text) on pref panel
 #define ColonAlign 60
 //Space between the two lines
-#define SpaceApart 50
+#define SpaceApart 20
 //Vertical centering line of the top line of text
-#define TopCenter 55
+#define TopCenter 75
 #define BotCenter TopCenter + SpaceApart
 //How far 
 #define TilesAlign ColonAlign + 15
+
+//Warning! Do not use IDs > 9000 (that's where PilRC's AUTOID elements start)
