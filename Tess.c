@@ -142,16 +142,13 @@ static struct {
   UInt16 ScreenHeader;
   UInt16 ScreenBorder;
   UInt16 MinimumPixelSize;
+  UInt16 MinWidth;
+  UInt16 MinHeight;
   UInt16 MaxWidth;
   UInt16 MaxHeight;
   Boolean Color;
 } DeviceSettings;
 //End Global Variables
-
-static void SetUsable(UInt32 Id, Boolean usable) {
-  FormPtr frm = FrmGetActiveForm();
-  CtlSetUsable(FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, Id)), usable);
-}
 
 static void updateMoveCounterDisplay(UInt32 numMoves) {
   FormType *frm = FrmGetActiveForm();
@@ -733,7 +730,6 @@ static void newGame() {
   FillBoardRandom(&Game.theBoard.g);
   //DrawSquares(&Game.theBoard);
   Game.numMoves = 0;
-  updateMoveCounterDisplay(Game.numMoves);
 }
 
 static RGBColorType ColorHexToRGB(Int32 hex) {
@@ -778,6 +774,9 @@ static void setupDeviceSettings() {
   DeviceSettings.ScreenHeader = 15;
   DeviceSettings.ScreenBorder = 5;
   DeviceSettings.MinimumPixelSize = 15;
+  DeviceSettings.MinWidth = 5;
+  DeviceSettings.MinHeight = 5;
+
   DeviceSettings.MaxWidth = ((DeviceSettings.ScreenWidth -
 			      DeviceSettings.ScreenBorder) / 
 			     DeviceSettings.MinimumPixelSize);
@@ -858,92 +857,62 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
   Boolean handled = false;
   FormPtr frm = FrmGetActiveForm ();
 
-  if (eventP->eType == ctlRepeatEvent) {
-    UInt16 cId = eventP->data.ctlRepeat.controlID;
+  if (eventP->eType == ctlSelectEvent) {
+    UInt16 cId = eventP->data.ctlSelect.controlID;
     if (cId == HeightDownArrow || cId == HeightUpArrow ||
-	cId == WidthDownArrow || cId == WidthDownArrow) {
-      FieldPtr f;
-      MemHandle oldTxtH, txtH;
-      Char *txtP; //Pointer to the handle above.
-      Char *fieldText;
-      UInt8 newValue;
-      UInt16 fieldId;
-      Boolean updateYes = 0;
+	cId == WidthDownArrow || cId == WidthUpArrow) {
       prefsTouched = true;
+      //Begin Height section
       if (cId == HeightDownArrow || cId == HeightUpArrow) {
-	fieldId = HeightField;
 	if (cId == HeightDownArrow) {
-	  if (tempPreferences.Height > 0) {
-	    updateYes = true;
+	  if (tempPreferences.Height > DeviceSettings.MinHeight) {
 	    tempPreferences.Height -= 1;
-	    newValue = tempPreferences.Height;
 	  }
-
 	}
 	else if (cId == HeightUpArrow &&
 		 tempPreferences.Height < DeviceSettings.MaxHeight) {
-	  updateYes = true;
 	  tempPreferences.Height += 1;
-	  newValue = tempPreferences.Height;
 	}
-      }
+      }//End Height Section
+      //Begin width section
       else if (cId == WidthDownArrow || cId == WidthUpArrow) {
-	fieldId = WidthField;
-	if (cId == WidthDownArrow && tempPreferences.Width > 0) {
-	  updateYes = true;
+	if (cId == WidthDownArrow &&
+	    tempPreferences.Width > DeviceSettings.MinWidth) {
 	  tempPreferences.Width -= 1;
-	  newValue = tempPreferences.Width;
 	}
 	else if (cId == WidthUpArrow &&
 		 tempPreferences.Width < DeviceSettings.MaxWidth) {
-	  updateYes = true;
 	  tempPreferences.Width += 1;
-	  newValue = tempPreferences.Width;
 	}
-      }
-      else {
-	//These lines aren't needed, but is here for clarity
-	updateYes = false;
-      }
-      
-      if (updateYes) {
-	f = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, fieldId));
-	txtH = MemHandleNew(maxStrIToALen * sizeof(Char));
-	txtP = MemHandleLock(txtH);
-	StrIToA(txtP, newValue);
-	MemHandleUnlock(txtH);
-	//Because of the unlock, txtP is now invalid.
-	//Now the emulator will catch a write to NULL instead of bus error.
-	txtP = NULL;
+      }//End Width Section
 
-	/* get the old text handle */
-	oldTxtH = FldGetTextHandle(f);
-	/* change the text and update the display */
-	FldSetTextHandle(f, txtH);
-	FldDrawField(f);
-	/* free the old text handle */
-	if (oldTxtH != NULL)
-	  MemHandleFree(oldTxtH);
+
+      {
+	UInt16 widthUp, widthDown, heightUp, heightDown;
+	Char HeightAsStr[maxStrIToALen], WidthAsStr[maxStrIToALen];
+	//This sets the up/down scroll buttons
+	widthUp = FrmGetObjectIndex(frm, WidthUpArrow);
+	widthDown = FrmGetObjectIndex(frm, WidthDownArrow);
+	heightUp = FrmGetObjectIndex(frm, HeightUpArrow);
+	heightDown = FrmGetObjectIndex(frm, HeightDownArrow);
+	//I learned how to do this in the addressbook's function
+	//PreferencesUpdateScrollers which lives in DataPref.c
+	FrmUpdateScrollers (frm, widthUp, widthDown,
+			    tempPreferences.Width<DeviceSettings.MaxWidth,
+			    tempPreferences.Width>DeviceSettings.MinWidth);
+	FrmUpdateScrollers (frm, heightUp, heightDown,
+			    tempPreferences.Height<DeviceSettings.MaxHeight,
+			    tempPreferences.Height>DeviceSettings.MinHeight);
+	//This sets the labels of height/width selectors
+	StrIToA(HeightAsStr, tempPreferences.Height);
+	StrIToA(WidthAsStr, tempPreferences.Width);
 	
-	handled = true;
+	FrmCopyLabel(FrmGetActiveForm(), HeightLabel, HeightAsStr);
+	FrmCopyLabel(FrmGetActiveForm(), WidthLabel, WidthAsStr);
       }
-      //These next lines make sure that all of the buttons are usable that
-      //should be and those which shouldn't be are disabled.
-      if (tempPreferences.Height > 0) SetUsable(HeightDownArrow, true);
-      else SetUsable(HeightDownArrow, false);
-      if (tempPreferences.Width > 0) SetUsable(WidthDownArrow, true);
-      else SetUsable(WidthDownArrow, false);
-      if (tempPreferences.Height < DeviceSettings.MaxHeight)
-	SetUsable(HeightUpArrow, true);
-      else SetUsable(HeightUpArrow, false);
-      if (tempPreferences.Width < DeviceSettings.MaxWidth)
-	SetUsable(WidthUpArrow, true);
-      else SetUsable(WidthUpArrow, false);
+      handled = true;
     }
-  }
-  else if (eventP->eType == ctlSelectEvent) {
-
-    if (eventP->data.ctlSelect.controlID == PreferencesOKButton) {
+    else if (eventP->data.ctlSelect.controlID == PreferencesOKButton) {
       //The Yes button returns 1 from this frmalert. (The No button returns 0)
       //Change this so that prefs touched isn't used --
       //make it so that it compares the current gamesettings to the
@@ -953,16 +922,12 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
 	handled = true;	
       }
       else if (FrmAlert(NewGameAlert) == 0) {
-	/*
-      	ListType *listP;
 	GameSettings *gs = &Game.theBoard.g;
+
+	gs->height = tempPreferences.Height;
+	gs->width = tempPreferences.Width;
 	gs->showPossible = Ctl_GetVal(frm, ShowPossibleMoves);
 
-	listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, HeightList));
-	gs->height = (LstGetSelection(listP) + 5);
-	listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, WidthList));
-	gs->width = (LstGetSelection(listP) + 5);
-*/
 	FreeBoard(&Game.theBoard);
 	newGame();
 
@@ -982,41 +947,27 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
     }
   }
   else if (eventP->eType == frmOpenEvent) {
-    GameSettings *gs = &Game.theBoard.g;
+    //GameSettings *gs = &Game.theBoard.g;
     
-    ControlType *ctl;
-    Char *label;
-    ListType *listP;
+    //ControlType *ctl;
+    //Char *label;
+    //ListType *listP;
 
     prefsTouched = false;
     tempPreferences.Height = Game.theBoard.g.height;
     tempPreferences.Width = Game.theBoard.g.width;
-    /*
-    Ctl_SetVal(frm, ShowPossibleMoves, gs->showPossible);
-
-    //FIX THIS -- IT IS BROKEN (2002-Aug-15)
-
-    ctl = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, HeightTrigger));
-    label = CtlGetLabel(ctl);
-    listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, HeightList));
-    StrCopy(label, LstGetSelectionText(listP, gs->height - 5));
-    CtlSetLabel(ctl, label);
-    LstSetSelection(listP, gs->height - 5);
-    //Makes it so that when the user clicks on the list, the currently
-    //set preference is in the selection box.
-    LstMakeItemVisible(listP, gs->height - 5);
+    Ctl_SetVal(frm, ShowPossibleMoves, Game.theBoard.g.showPossible);
     
-    ctl = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, WidthTrigger));
-    label = CtlGetLabel(ctl);
-    listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, WidthList));
-    StrCopy(label, LstGetSelectionText(listP, gs->width - 5));
-    CtlSetLabel(ctl, label);
-    LstSetSelection(listP, gs->width - 5);
-    //Makes it so that when the user clicks on the list, the currently
-    //set preference is in the selection box.
-    LstMakeItemVisible(listP, gs->width - 5);
-    */
+
     FrmDrawForm (frm);
+    {
+      Char HeightAsStr[maxStrIToALen], WidthAsStr[maxStrIToALen];
+      StrIToA(HeightAsStr, tempPreferences.Height);
+      StrIToA(WidthAsStr, tempPreferences.Width);
+      
+      FrmCopyLabel(FrmGetActiveForm(), HeightLabel, HeightAsStr);
+      FrmCopyLabel(FrmGetActiveForm(), WidthLabel, WidthAsStr);
+    }    
     handled = true;
   }
   return (handled);
@@ -1044,6 +995,8 @@ static Boolean MainMenuHandleEvent(UInt16 menuID) {
     if (FrmAlert(NewGameAlert) == 0) {
       FreeBoard(&Game.theBoard);
       newGame();
+      updateMoveCounterDisplay(Game.numMoves);
+
       //This isn't needed cause it calls frm update event when the dialog
       //goes away.
       //DrawSquares(&Game.theBoard);
@@ -1084,6 +1037,7 @@ static Boolean MainFormHandleEvent(EventPtr event)
       if (FrmAlert(NewGameAlert) == 0) {
 	FreeBoard(&Game.theBoard);
 	newGame();
+	updateMoveCounterDisplay(Game.numMoves);
 	//This isn't needed cause it calls frmupdate event.
 	DrawSquares(&Game.theBoard);
       }
@@ -1149,6 +1103,7 @@ static Boolean MainFormHandleEvent(EventPtr event)
       FrmDrawForm(form);
       //This actually draws the squares
       DrawSquares(&Game.theBoard);
+      updateMoveCounterDisplay(Game.numMoves);
       //You must return true, otherwise the caller erases the form
       //(and everything performed above), and calls FrmDrawForm itself.
       handled = true;

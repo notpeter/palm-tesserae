@@ -48,10 +48,10 @@
 
 #define	HeightUpArrow		6103
 #define	HeightDownArrow		6104
-#define HeightField		6105
+#define HeightLabel		6105
 #define WidthDownArrow		6106
 #define WidthUpArrow		6107
-#define WidthField		6108
+#define WidthLabel		6108
 
 
 //Non Resource ID Constants (Only used for preprocessing)
@@ -63,6 +63,6 @@
 #define TopCenter 75
 #define BotCenter TopCenter + SpaceApart
 //How far 
-#define TilesAlign ColonAlign + 15
+#define TilesAlign ColonAlign + 5
 
 //Warning! Do not use IDs > 9000 (that's where PilRC's AUTOID elements start)
