@@ -15,9 +15,15 @@
 #define TessPrefID	0
 #define TessPrefVersionNumber 1
 
-#define LEVEL_BEGINNER 1
-#define LEVEL_INTERMEDIATE 2
-#define LEVEL_ADVANCED 3
+typedef enum DifficultyType {
+  difficultyEasy = 1,
+  difficultyIntermediate,
+  difficultyMoreDifficult,
+  difficultyAdvanced,
+  difficultyImpossible
+} DifficultyType;
+
+#define defaultDifficulty difficultyEasy;
 
 #define WHITE	0x00FFFFFF
 #define RED	0x00FF0000
@@ -33,13 +39,17 @@
 //Other combinations make sense (example 00000101 has [] and +)
 //00001000 = OnBoard (True if sqaure can hold a piece)
 
-#define ATTRIBUTES_MASK 0x07
-#define GETATTRIBUTES(x) (x & ATTRIBUTES_MASK)
-#define ONBOARD_MASK 0x08
-#define ONBOARD(x) (x & ONBOARD_MASK) >> 3
+//#define ATTRIBUTES_MASK 0x07
+//#define GETATTRIBUTES(x) (x & ATTRIBUTES_MASK)
+//#define ONBOARD_MASK 0x08
+//#define ONBOARD(x) (x & ONBOARD_MASK) >> 3
 #define ISPOWEROF2(x) (0 == (x&(x-1)))
 
-typedef UInt8 Square;
+//typedef UInt8 Square;
+typedef struct Square {
+  unsigned onBoard	: 1;	//Is the tile on the board
+  unsigned attributes	: 3;	//The attributes
+} Square;
 
 #define MAX_SIZE_WIDTH 25 //definite max
 #define MAX_SIZE_HEIGHT 25 //definite max
@@ -53,8 +63,10 @@ typedef struct GameSettings {
   UInt16 height;
   //You only actually need a pointer cause you can use the recover handle
   //functions to get the handle when it is needed for resizing/freeing memory 
+  UInt8 skillLevel;
   Square *board;
   Boolean squarePieces;
+  //Show possible moves
   Boolean showPossible;
 } GameSettings;
 
@@ -78,27 +90,28 @@ typedef struct Move {
   UInt16 to   : 8;
 } Move;
 
-/*typedef struct Pref {
-  Board theBoard;
-  GameSettings g;
-} Pref;
-*/
 typedef struct aGame {
   //You only actually need a pointer cause you can use the recover handle
   //functions to get the handle when it is needed for resizing/freeing memory
-  Board b;
-  Moves *moves;
+  Board theBoard;
+  Move *moves;
   UInt16 numMoves;
 } aGame;
 
+//Preferences must include:
+//An Array of type Move of moves
+//A number of moves performed (moveCount)
+//A Board (with all the board settings)
+//An Array of Squares that fill the board.
+
 //Begin GLobal Variables
-//static Board bb;
 //Think binary counting here. the third color is 1 + 2;
 static const UInt32 colorsHex[8] = {WHITE,YELLOW,BLUE,GREEN,RED,
 				    ORANGE,PURPLE,GRAY};
 //colors for each of the possible tiles.
 static IndexedColorType colors[8];
-static Pref Game;
+static aGame Game;
+//static Pref Game;
 
 
 //static DmOpenRef TessDB;
@@ -117,7 +130,7 @@ static struct {
 
 
 static void MovePushMove(aGame *g, Move m) {
-  MemHandle h = MemRecoverHandle(g->moves);
+  MemHandle h = MemPtrRecoverHandle(g->moves);
   if (g->numMoves >= (MemHandleSize(h) / sizeof(Move))) {
     MemHandleUnlock(h);
     MemHandleResize(h, sizeof(Move) * (g->numMoves + 8));
@@ -127,8 +140,8 @@ static void MovePushMove(aGame *g, Move m) {
   g->numMoves++;  
 }
 
-static Move MovePopMove(aGame *g) {
-  MemHandle h = MemRecoverHandle(g->moves);
+static void MovePopMove(aGame *g, Move *m) {
+  MemHandle h = MemPtrRecoverHandle(g->moves);
   if (g->numMoves == 0) {
     //Empty Stack!
     return;
@@ -139,17 +152,17 @@ static Move MovePopMove(aGame *g) {
     g->numMoves -= 8;
     g->moves = MemHandleLock(h);
   }
-  numMoves--;  
-  return moves[g->numMoves - 2];
+  g->numMoves--;
+  *m = g->moves[g->numMoves - 2];
 }
 
-static Move MoveGetMove(aGame *g, UInt16 pos) {
-  MemHandle h = MemRecoverHandle(g->moves);
+static void MoveGetMove(aGame *g, Move *m, UInt16 pos) {
+  //MemHandle h = MemPtrRecoverHandle(g->moves);
   if (pos >= g->numMoves) {
     //Bad Position!
     return;
   }
-  return moves[pos];
+  *m = g->moves[pos];
 }
 
 static UInt16 RandomNum(UInt16 n) {
@@ -164,20 +177,20 @@ static UInt16 RandomNum(UInt16 n) {
 static Board MakeBoard(UInt8 width, UInt8 height, Boolean squarePieces) {
   Board b;
   UInt16 i;
-  b.width = width;
-  b.height = height;
-  b.squarePieces = squarePieces;
+  b.g.width = width;
+  b.g.height = height;
+  b.g.squarePieces = squarePieces;
   //The -1 at the end is to take the lines between cells into account.
   b.squareWidth = (DeviceSettings.ScreenWidth - 
-		   (DeviceSettings.ScreenBorder * 3)) / (b.width) -1;
+		   (DeviceSettings.ScreenBorder * 3)) / (b.g.width) -1;
   b.squareHeight = (DeviceSettings.ScreenHeight - DeviceSettings.ScreenHeader -
-		    (DeviceSettings.ScreenBorder * 3)) / (b.height) -1;
+		    (DeviceSettings.ScreenBorder * 3)) / (b.g.height) -1;
   if (b.squareWidth % 2 != 1)
     b.squareWidth--;
   if (b.squareHeight % 2 != 1)
     b.squareHeight--;
   //Make the pieces square if need be.
-  if (b.squarePieces) {
+  if (b.g.squarePieces) {
     if (b.squareHeight >= b.squareWidth)
       b.squareHeight = b.squareWidth;
     else
@@ -185,90 +198,97 @@ static Board MakeBoard(UInt8 width, UInt8 height, Boolean squarePieces) {
   }
   b.rect.topLeft.x = ((DeviceSettings.ScreenWidth -
 		    (DeviceSettings.ScreenBorder * 2) -
-		    ((b.squareWidth) * b.width)) /2);
+		    ((b.squareWidth) * b.g.width)) /2);
   b.rect.topLeft.y = (((DeviceSettings.ScreenHeight -
 		     (DeviceSettings.ScreenBorder * 2) -
 		     DeviceSettings.ScreenHeader -
-		     (b.squareHeight * b.height)) /2) +
+		     (b.squareHeight * b.g.height)) /2) +
 		   DeviceSettings.ScreenHeader);
   b.size = width * height;
-  //b.board = MemHandleLock(MemHandleNew(sizeof(Square) * b.size));
+  b.g.board = MemHandleLock(MemHandleNew(sizeof(Square) * b.size));
   for (i = 0; i < b.size; i++) {
-    //Sets the bit in b.board[i] to make it a usable part of the board
-    b.board[i] = ONBOARD_MASK;
+    //Sets the bit in b.g.board[i] to make it a usable part of the board
+    b.g.board[i].onBoard = 1;
   }
   return b;
 }
 
-static void FillBoardRandom(Board *b) {
+static void FillBoardRandom(GameSettings *g) {
   //Level 0 means all primary color tiles
   //Level 1 means primary and secondary color tiles
   //Level 2 means primary, secondary and gray tiles.
   UInt16 i, tempNum;
-  for (i = 0; i < (b->width * b->height);i++) {
-    if (ONBOARD(b->board[i])) {
+  //this large loop is really ghetto, I could make it way quicker
+  //if i had seperate loops for each difficulty type. Also this would
+  //allow a lot more flexibility.
+  for (i = 0; i < (g->width * g->height);i++) {
+    if (g->board[i].onBoard) {
       //Clears the attribute bits that might have been set 
-      b->board[i] = ((b->board[i] >> 3) << 3);
+      g->board[i].attributes = 0;
       //This gives us a number between 1 and 7 (0 would be invalid cause there
       //would be no tile there.
-      if (b->skillLevel == LEVEL_BEGINNER) {
+      if (g->skillLevel == difficultyEasy) {
 	tempNum = RandomNum(3);
 	if (tempNum == 0) {
-	  b->board[i] += tempNum + 1;
+	  g->board[i].attributes = 1;
 	}
 	else if (tempNum == 1) {
-	  b->board[i] += tempNum + 1;
+	  g->board[i].attributes = 2;
 	}
 	else if (tempNum == 2) {
-	  b->board[i] += tempNum + 2;
+	  g->board[i].attributes = 4;
 	}
 	else
 	  return;
       }
-      else if (b->skillLevel == LEVEL_INTERMEDIATE) {
-	b->board[i] += RandomNum(6) + 1;
+      //these next two are the same, but will be different
+      else if (g->skillLevel == difficultyIntermediate) {
+	g->board[i].attributes += RandomNum(6) + 1;
       }
+      else if (g->skillLevel == difficultyMoreDifficult) {
+	g->board[i].attributes += RandomNum(6) + 1;
+      }
+      //these next two are the same, but will be different
+      else if (g->skillLevel == difficultyAdvanced) {
+	g->board[i].attributes += RandomNum(7) + 1;
+      }
+      //It's not actually impossible, just very difficult.
+      else if (g->skillLevel == difficultyImpossible) {
+	g->board[i].attributes += RandomNum(7) + 1;
+      }
+      //if not one of the defined difficultytypes we don't know how to fill it
       else {
-	b->board[i] += RandomNum(7) + 1;
+	return;
       }
     }
   }
 }
-static Pref GetPrefs() {
-  Pref prefs;
-  UInt16 prefsSize = sizeof(prefs);
-  if (PrefGetAppPreferences(TessCreatorID, TessPrefID, &prefs,
-			    &prefsSize, true) != noPreferenceFound) {
-    
+static aGame GetSavedGame() {
+  aGame ag;
+  UInt16 gSize = sizeof(ag);
+  /*
+  if (PrefGetAppPreferences(TessCreatorID, TessPrefID, &g,
+			    &gSize, true) != noPreferenceFound) {
   }
   else {
+  */
     // No preferences exist yet, so set the defaults
-    prefs.width = 8;
-    prefs.theBoard.width = prefs.width;
-    prefs.height = 8;
-    prefs.theBoard.height = prefs.height;
-    prefs.skillLevel = LEVEL_BEGINNER;
-    prefs.theBoard.skillLevel = prefs.skillLevel;
-    prefs.squarePieces = true;
-    prefs.theBoard.squarePieces = prefs.squarePieces;
-    prefs.showPossible = true;
-    prefs.theBoard = MakeBoard(prefs.theBoard.width,
-			       prefs.theBoard.height,
-			       prefs.theBoard.squarePieces);
-    prefs.theBoard.pieceSelected = -1;
-    prefs.theBoard.blinkRate = SysTicksPerSecond() / 2;
-    prefs.theBoard.blinking = false;
-    prefs.theBoard.blinkOn = false;
+    ag.theBoard = MakeBoard(8, 8, true);
+    ag.theBoard.g.skillLevel = difficultyEasy;
+    ag.theBoard.g.showPossible = true;
+    ag.theBoard.pieceSelected = -1;
+    ag.theBoard.blinkRate = SysTicksPerSecond() / 2;
+    ag.theBoard.blinking = false;
+    ag.theBoard.blinkOn = false;
     
-    FillBoardRandom(&prefs.theBoard);
-  }
-
-  return prefs;
+    FillBoardRandom(&ag.theBoard.g);
+  
+  return ag;
 }
 
 static Int16 GetIndex(Board *b, UInt8 x, UInt8 y) {
-  if ((x < b->width) && (y < b->height))
-    return (x + (b->width * y));
+  if ((x < b->g.width) && (y < b->g.height))
+    return (x + (b->g.width * y));
   else
     return -1;
 }
@@ -276,8 +296,8 @@ static Int16 GetIndex(Board *b, UInt8 x, UInt8 y) {
 static PointType GetXY(Board *b, UInt16 Index) {
   PointType p;
   if (Index < b->size && Index >= 0) {
-    p.x = (Index % b->width);
-    p.y = (Index / b->width);
+    p.x = (Index % b->g.width);
+    p.y = (Index / b->g.width);
   }
   else {
     p.x = -20;
@@ -313,11 +333,11 @@ static UInt16 ScreenCoordToBoardIndex(Board *b, Coord x, Coord y) {
 //but now its just a static array.
 static void FreeBoard(Board *b) {
   if (b->size) {
-    //if (MemPtrRecoverHandle(b->board)) {
-    //MemHandleFree(MemPtrRecoverHandle(b->board));
-    //Clear any other contents so it won't be used again.
-    MemSet(b, sizeof(Board), 0x00);
-    //}
+    if (MemPtrRecoverHandle(b->g.board)) {
+      MemHandleFree(MemPtrRecoverHandle(b->g.board));
+      //Clear any other contents so it won't be used again.
+      MemSet(b, sizeof(Board), 0x00);
+    }
   }
 }
 
@@ -372,23 +392,23 @@ static void DrawOneSquare(Board *b, PointType p, Square s) {
     color.topLeft = p;
     color.extent.x = b->squareWidth;
     color.extent.y = b->squareHeight; 
-    oldBGIndex = WinSetBackColor(colors[(GETATTRIBUTES(s))]);
+    oldBGIndex = WinSetBackColor(colors[s.attributes]);
     WinEraseRectangle(&color, 0);
     WinSetBackColor(oldBGIndex);
   }
-  if ((s >> 0) %2) {    
+  if ((s.attributes >> 0) %2) {    
     DrawPlusInRect(r);
   }
-  if ((s >> 1) %2) {
+  if ((s.attributes >> 1) %2) {
     DrawSquareInRect(r);
   }
-  if ((s >> 2) %2) {
+  if ((s.attributes >> 2) %2) {
     DrawCircleInRect(r);
   }
 }
 
 static void DrawALoc(Board *b, UInt16 loc){
-  Square s = b->board[loc];
+  Square s = b->g.board[loc];
   PointType boardPos = GetXY(b, loc);
   RectangleType r;
   r.topLeft.x = (b->rect.topLeft.x + ((1 + b->squareWidth) * boardPos.x));
@@ -422,7 +442,7 @@ static void DrawBox(Board *b, UInt16 index) {
     //frameBits.bits.width = 1;
     WinDrawRectangle(&r, 3);
     //WinDrawRectangleFrame(frameBits, &r);
-    //b->board[pieceSelected]
+    //b->g.board[pieceSelected]
   }
   else {
     DrawALoc(b, index);
@@ -434,22 +454,22 @@ static void DrawSquares(Board *b) {
   RectangleType r;
   
   //If these extents were one less we wouldn't get that cool shadow effect.
-  b->rect.extent.x = (b->squareWidth+1) * b->width;
-  b->rect.extent.y = (b->squareHeight+1) * b->height;
+  b->rect.extent.x = (b->squareWidth+1) * b->g.width;
+  b->rect.extent.y = (b->squareHeight+1) * b->g.height;
   WinEraseRectangle(&b->rect, 0);
   WinDrawRectangleFrame(frame, &b->rect);
 
   r.extent.x = b->squareWidth;
   r.extent.y = b->squareHeight;
-    for (i = 0; i < b->width; i++) {
+    for (i = 0; i < b->g.width; i++) {
     //Set the horizontal position
     r.topLeft.x = b->rect.topLeft.x + (i * (b->squareWidth + 1));
-    for (j = 0; j < b->height; j++) {
+    for (j = 0; j < b->g.height; j++) {
       //Set the vertical position
       r.topLeft.y = b->rect.topLeft.y + (j * (b->squareHeight + 1));
       WinDrawRectangleFrame(frame, &r);
-      if (ONBOARD(b->board[GetIndex(b, i, j)])) {
-	DrawOneSquare(b, r.topLeft, b->board[GetIndex(b, i, j)]);
+      if (b->g.board[GetIndex(b, i, j)].onBoard) {
+	DrawOneSquare(b, r.topLeft, b->g.board[GetIndex(b, i, j)]);
       }
       else {
 	const CustomPatternType halfGray ={0x55,0xAA,0x55,0xAA,
@@ -502,45 +522,56 @@ static Boolean move(Board *b, UInt16 src, UInt16 dest) {
     midPt.x = ((srcPt.x + destPt.x) / 2);
     midPt.y = ((srcPt.y + destPt.y) / 2);
     mid = GetIndex(b, midPt.x, midPt.y);
+
+    //If all of the spaces are on the board.
+    if (b->g.board[src].onBoard && b->g.board[mid].onBoard
+	&& b->g.board[dest].onBoard) {
     
-    newSrc = GETATTRIBUTES(b->board[src]);
-    newMid = GETATTRIBUTES(b->board[mid]);
-    newDest = GETATTRIBUTES(b->board[dest]);
-    
-    if ((newMid) &&
-		   ((((ISPOWEROF2(newSrc)) &&
-		      (ISPOWEROF2(newMid))) ||
-		     ((newSrc & newMid) == newSrc)) &&
-		    ((newSrc == newDest) || ((newSrc & newDest) == 0)))) {
-    
-      newMid = (ONBOARD_MASK |
-		(((ISPOWEROF2(newSrc)) && (ISPOWEROF2(newMid))) ? 0 :
-		 (newMid & (~newSrc))));
-      newDest = (ONBOARD_MASK | (newSrc | newDest));
-      newSrc = ONBOARD_MASK;
+      newSrc.attributes = b->g.board[src].attributes;
+      newMid.attributes = b->g.board[mid].attributes;
+      newDest.attributes = b->g.board[dest].attributes;
       
-      b->board[src] = newSrc;
-      b->board[mid] = newMid;
-      b->board[dest] = newDest;
-      
-      DrawALoc(b, src);
-      DrawALoc(b, mid);
-      DrawALoc(b, dest);
-      return(true);
+      //If the middle has some tiles on it.
+      if ((newMid.attributes) &&
+	  //And either the src and the middle are primaries.
+	  ((((ISPOWEROF2(newSrc.attributes)) &&
+	     (ISPOWEROF2(newMid.attributes))) ||
+	    //Or the mid contains everything that is in the src
+	    ((newSrc.attributes & newMid.attributes) == newSrc.attributes)) &&
+	   //And either the src and dest are the same
+	   ((newSrc.attributes == newDest.attributes) ||
+	    //or the destination has nothing that the source does
+	    ((newSrc.attributes & newDest.attributes) == 0)))) {
+	
+	newMid.attributes = (((ISPOWEROF2(newSrc.attributes)) &&
+			      (ISPOWEROF2(newMid.attributes))) ? 0 :
+			     (newMid.attributes & (~newSrc.attributes)));
+	newDest.attributes = (newSrc.attributes | newDest.attributes);
+	newSrc.attributes = 0;
+	
+	b->g.board[src].attributes = newSrc.attributes;
+	b->g.board[mid].attributes = newMid.attributes;
+	b->g.board[dest].attributes = newDest.attributes;
+	
+	DrawALoc(b, src);
+	DrawALoc(b, mid);
+	DrawALoc(b, dest);
+	return(true);
+      }
     }
   }
   b->pieceSelected = -1;
   return false;
 }
 static void newGame() {
-  Game = GetPrefs();
+  Game = GetSavedGame();
   //bb = MakeBoard(Game.width, Game.height, Game.squarePieces);
   Game.theBoard.pieceSelected = -1;
   Game.theBoard.blinkRate = SysTicksPerSecond() / 2;
   Game.theBoard.blinking = false;
   Game.theBoard.blinkOn = false;
-  Game.theBoard.skillLevel = LEVEL_BEGINNER;
-  FillBoardRandom(&Game.theBoard);
+  Game.theBoard.g.skillLevel = difficultyEasy;
+  FillBoardRandom(&Game.theBoard.g);
   DrawSquares(&Game.theBoard);
 }
 
@@ -634,7 +665,7 @@ static Err StartApplication(UInt16 launchFlags) {
       return DmGetLastErr();
       }*/
 
-  Game = GetPrefs();
+  Game = GetSavedGame();
 
   FrmGotoForm(MainForm);
   return 0;
@@ -716,7 +747,7 @@ static Boolean MainFormHandleEvent(EventPtr event)
       handled = true;
       break;
     case MainFormRDButton:
-      //Game.skillLevel = LEVEL_INTERMEDIATE;
+      //Game.skillLevel = difficultyIntermediate;
       DrawSquares(&Game.theBoard);
       handled = true;
       break;
@@ -729,7 +760,7 @@ static Boolean MainFormHandleEvent(EventPtr event)
     if (-1 != boardIndex) {
         //If there is no piece selected, select the piece.
       if (-1 == Game.theBoard.pieceSelected) {
-	if (GETATTRIBUTES(Game.theBoard.board[boardIndex]) != 0x00) {
+	if (Game.theBoard.g.board[boardIndex].attributes != 0x00) {
 	  DrawBox(&Game.theBoard, boardIndex);
 	  Game.theBoard.pieceSelected = boardIndex;
 	}
