@@ -366,7 +366,7 @@ static PointType GetXY(Board *b, UInt16 Index) {
     p.y = -20;
     //Display and error message or something.
   }
-  return (p);
+  return p;
 }
 
 static PointType AbsoluteToRelative(Board *b, PointType p1) {
@@ -483,34 +483,47 @@ static void DrawALoc(Board *b, UInt16 loc){
   WinEraseRectangle(&r, 0);
   DrawOneSquare(b, r.topLeft, s);
 }
-static void DrawBox(Board *b, UInt16 index) {
-  //j = 3 gives a nice effect that would work well for checkers
-  UInt8 j = 6;
+static void DrawBox(Board *b, UInt16 index, Boolean Round) {
+  UInt8 j = 5, k = 0;
   //FrameBitsType frameBits;
   RectangleType r;
   PointType p;
-  if (index != Game.theBoard.pieceSelected) {
-    p = GetXY(b, index);
-    r.topLeft.x = b->rect.topLeft.x + ((b->squareWidth+1) * p.x);
-    r.topLeft.y = b->rect.topLeft.y + ((b->squareHeight+1) * p.y);
-    r.extent.x = (b->squareWidth);
-    r.extent.y = (b->squareHeight);
-    //Palm says FrameBitsType doesn't have a garunteed structure
-    //So I don't know if this will work in future revisions.
-    //frameBits.word = rectangleFrame;
-    
-    r.topLeft.x += j;
-    r.topLeft.y += j;
-    r.extent.x  -= (j * 2);
-    r.extent.y  -= (j * 2);
-    //frameBits.bits.cornerDiam = (r.extent.x /2) +1;
-    //frameBits.bits.width = 1;
-    WinDrawRectangle(&r, 3);
-    //WinDrawRectangleFrame(frameBits, &r);
-    //b->g.board[pieceSelected]
+  
+  if (Round)
+    k = 3;
+  p = GetXY(b, index);
+  r.topLeft.x = b->rect.topLeft.x + ((b->squareWidth+1) * p.x);
+  r.topLeft.y = b->rect.topLeft.y + ((b->squareHeight+1) * p.y);
+  r.extent.x = (b->squareWidth);
+  r.extent.y = (b->squareHeight);
+  //Palm says FrameBitsType doesn't have a garunteed structure
+  //So I don't know if this will work in future revisions.
+  //frameBits.word = rectangleFrame;
+  
+  r.topLeft.x += j;
+  r.topLeft.y += j;
+  r.extent.x  -= (j * 2);
+  r.extent.y  -= (j * 2);
+  //frameBits.bits.cornerDiam = (r.extent.x /2) +1;
+  //frameBits.bits.width = 1;
+  WinDrawRectangle(&r, k);
+  //WinDrawRectangleFrame(frameBits, &r);
+  //b->g.board[pieceSelected]
+}
+static void DrawSelection(Board *b, UInt16 boardIndex) {
+  Square s = b->g.board[boardIndex];
+  if (boardIndex != b->pieceSelected) {
+    if (ISPOWEROF2(s.attributes)) {
+      //Draw a circle
+      DrawBox(b, boardIndex, true);
+    }
+    else {
+      //Draw a square
+      DrawBox(b, boardIndex, false);
+    }
   }
   else {
-    DrawALoc(b, index);
+    DrawALoc(b, boardIndex);
   }
 }
 static void DrawSquares(Board *b) {
@@ -831,19 +844,23 @@ static Boolean MainFormHandleEvent(EventPtr event)
         //If there is no piece selected, select the piece.
       if (-1 == Game.theBoard.pieceSelected) {
 	if (Game.theBoard.g.board[boardIndex].attributes != 0x00) {
-	  DrawBox(&Game.theBoard, boardIndex);
+	  DrawSelection(&Game.theBoard, boardIndex);
+	  //DrawBox(&Game.theBoard, boardIndex, false);
 	  Game.theBoard.pieceSelected = boardIndex;
 	}
       }
       //If the same piece has been clicked again, deselect that piece
       else if (boardIndex == Game.theBoard.pieceSelected) {
-	DrawBox(&Game.theBoard, boardIndex);
+	DrawSelection(&Game.theBoard, boardIndex);
+	//DrawBox(&Game.theBoard, boardIndex, false);
 	Game.theBoard.pieceSelected = -1;
       }
       else {
-	DrawBox(&Game.theBoard, Game.theBoard.pieceSelected);
+	DrawSelection(&Game.theBoard, Game.theBoard.pieceSelected);
+	//DrawBox(&Game.theBoard, Game.theBoard.pieceSelected, false);
 	if (move(&Game.theBoard, Game.theBoard.pieceSelected, boardIndex)) {
 	  //DrawBox(&Game.theBoard, boardIndex);
+	  
 	  Game.theBoard.pieceSelected = -1;
 	}
       }
