@@ -10,48 +10,43 @@ CC              = m68k-palmos-gcc
 PILRC           = pilrc
 OBJRES          = m68k-palmos-obj-res
 BUILDPRC        = build-prc
-
+PRCFLAGS	= -t appl -o $(PRC) -n $(ICONTEXT) -c $(APPID) 
 
 # Uncomment this if you want to build a GDB-debuggable version
 # mdebug-labels allows the log files in the palmOS debugger to put names
 # on it's stack traces.  Super useful. (p67 Using Palm OS Emulator PDF)
-CFLAGS = -O0 -Wall -g -mdebug-labels
-#CFLAGS = -O0 -g -mdebug-labels
+#CFLAGS = -O0 -Wall -g -mdebug-labels
+CFLAGS = -O0 -g -mdebug-labels
 #CFLAGS = -O2
 
 all: $(PRC)
 
-$(PRC): grc.stamp bin.stamp;
-	$(BUILDPRC) $(PRC) $(ICONTEXT) $(APPID) *.grc *.bin
-
-grc.stamp: $(APP)
-	$(OBJRES) $(APP)
-	touch $@
+$(PRC): $(APP) $(APP).ro
+	$(BUILDPRC) $(PRCFLAGS) $(APP).ro $(APP)
+#	$(BUILDPRC) $(PRC) $(ICONTEXT) $(APPID) *.grc *.bin
 
 $(APP): $(SRC:.c=.o);
+	@echo Linking...
 	$(CC) $(CFLAGS) $^ -o $@
 
-bin.stamp: $(RCP)
-	$(PILRC) $^ $(BINDIR)
+$(APP).ro: $(RCP)
+	@echo Compiling Resources...
+	$(PILRC) -ro $^ $(APP).ro
 	touch $@
 
-%.o: %.c Makefile $(HDR)
+%.o: %.c $(HDR)
+	@echo Compiling Code...
 	$(CC) $(CFLAGS) -c $< -o $@
-
-Makefile:
-	touch $@
-
-$(HDR):
-	touch $@
 
 #               touch $<
 # Enable the previous line if you want to compile EVERY time.
 
+.PHONY: depend dep clean veryclean
 depend dep:
 	$(CC) -M $(SRC) > .dependencies
 
 clean:
-	rm -rf *.o $(APP) *.bin *.grc *.stamp *~
+	rm -rf *.o $(APP) *.ro *.bin *.grc *~
 
 veryclean: clean
 	rm -rf *.prc *.bak

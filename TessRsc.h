@@ -1,6 +1,11 @@
+//wierd characters
+#define LEFTARROW		'0x03'
+#define RIGHTARROW		'0x04'
+
 // Main form
 #define MainForm		1000
 #define	PreferencesForm		1001
+#define	BoardEditForm		1002
 
 #define MainFormNewButton	2000
 #define MainFormRDButton	2003
@@ -27,21 +32,31 @@
 
 
 #define	HeresTheInfo		4000
-//#define Shape_Base		2500
-//#define Shape_Count		7
-//#define	Shape1			Shape_Base + 1
-//#define	Shape2			Shape_Base + 2
-//#define	Shape3			Shape_Base + 3
-//#define	Shape4			Shape_Base + 4
-//#define	Shape5			Shape_Base + 5
-//#define	Shape6			Shape_Base + 6
-//#define	Shape7			Shape_Base + 7
 
-#define	SquareTiles		6000
 #define	ShowPossibleMoves	6001
 #define	HeightTrigger		6002
 #define	HeightList		6003
 #define	WidthTrigger		6004
 #define	WidthList		6005
 
+#define HeightRightArrow	6006
+
+#define	BoardEditOKButton	6101
+#define	BoardEditCancelButton	6102
+
+#define	HeightUpArrow		6103
+#define	HeightDownArrow		6104
+
 //Warning! Do not use IDs > 9000 (that's where PilRC's AUTOID elements start)
+
+
+//Non Resource ID Constants (Only used for preprocessing)
+//Alignment of colon (on right side of text) on pref panel
+#define ColonAlign 60
+//Space between the two lines
+#define SpaceApart 50
+//Vertical centering line of the top line of text
+#define TopCenter 55
+#define BotCenter TopCenter + SpaceApart
+//How far 
+#define TilesAlign ColonAlign + 15

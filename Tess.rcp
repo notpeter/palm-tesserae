@@ -3,10 +3,12 @@
 APPLICATIONICONNAME ID 100 "Tess"
 APPLICATION         ID 1   "Tess"
 VERSION             ID 1   "0.1"
+ICON "largeicon.bmp"
+SMALLICON "smallicon.bmp"
 
 form id MainForm at (0 0 160 160)
 
-menuid MainMenuBar  
+menuid MainMenuBar
 begin
   title "Tesserae"
   button "RD" id MainFormRDButton at (55 2 17 10)
@@ -18,10 +20,10 @@ MENU ID MainMenuBar
 BEGIN
     PULLDOWN "Game"
     BEGIN
-        MENUITEM "New"   		MainGameNew		"N"
-        MENUITEM "Undo"   		MainGameUndo		"U"
-	MENUITEM "Instructions"		MainGameInstructions	"I"
-    	MENUITEM "Preferences"		MainGamePreferences     "R"
+        MENUITEM "New"           MainGameNew        "N"
+        MENUITEM "Undo"           MainGameUndo        "U"
+    MENUITEM "Instructions"        MainGameInstructions    "I"
+        MENUITEM "Preferences"        MainGamePreferences     "R"
     END
     PULLDOWN "Options"
     BEGIN
@@ -34,7 +36,7 @@ INFORMATION
 BEGIN
     TITLE   "About Tesserae"
     MESSAGE "Duckies.org Tesserae\n"\
-	    "Version 0.1"
+        "Version 0.1"
     BUTTONS "OK"
 END
 
@@ -61,36 +63,33 @@ string id InstructionsStr
   "Click and stuff\n"
 
 
-ALERT ID HeresTheInfo 
+ALERT ID HeresTheInfo
 INFORMATION
 BEGIN
      TITLE "Here's the info"
      MESSAGE "^1, ^2, ^3"
-     BUTTONS "OK" 
+     BUTTONS "OK"
 END
 
 
 
 FORM ID PreferencesForm  AT ( 2 2 156 156 )
-MODAL DEFAULTBTNID PreferencesCancelButton  FRAME     
+MODAL DEFAULTBTNID PreferencesCancelButton  FRAME
 BEGIN
         TITLE "Preferences"
-	LABEL "Skill:" AUTOID AT (5 75)
-	CHECKBOX "Show Possible Moves" ID ShowPossibleMoves    AT (5 90 101 10)
+    CHECKBOX "Show Possible Moves" ID ShowPossibleMoves    AT (5 109 101 10)
 
-	BUTTON "OK" ID PreferencesOKButton  AT (5 140 35 12)
-	BUTTON "Cancel" ID PreferencesCancelButton  AT (45 140 35 12)
-		
-	
-	LABEL "Height:" AUTOID AT (5 17)	
-	POPUPTRIGGER "15" ID HeightTrigger  AT (PREVLEFT+30 PREVTOP 32 15)  LEFTANCHOR
-	LIST  "5" "6" "7" "8" "9" "10" "11" "12" "13"  ID HeightList  AT (PREVLEFT PREVTOP PREVWIDTH-10 57) VISIBLEITEMS 5 NONUSABLE 
-	POPUPLIST ID HeightTrigger  HeightList
-	
-	LABEL "Width:" AUTOID AT (5 45)
-	POPUPTRIGGER "15" ID WidthTrigger  AT (PREVLEFT+30 PREVTOP 32 15)  LEFTANCHOR
-	LIST  "5" "6" "7" "8" "9" "10" "11" "12" "13"  ID WidthList  AT (PREVLEFT PREVTOP PREVWIDTH-10 57) VISIBLEITEMS 5 NONUSABLE
-	POPUPLIST ID WidthTrigger  WidthList
+    BUTTON "OK" ID PreferencesOKButton  AT (5 140 35 12)
+    BUTTON "Cancel" ID PreferencesCancelButton  AT (45 140 35 12)
+
+    LABEL "Width:" AUTOID AT (RIGHT@(ColonAlign) CENTER@TopCenter) FONT 1
+
+    LABEL "Height:" AUTOID AT (RIGHT@(ColonAlign) CENTER@BotCenter) FONT 1
+    LABEL "   6" AUTOID AT (TilesAlign CENTER@BotCenter) FONT 1
+    LABEL "Tiles" AUTOID AT (PREVLEFT+14 CENTER@BotCenter) FONT 1
+    REPEATBUTTON "\001" HeightUpArrow AT (PREVLEFT+PREVWIDTH+5 CENTER@(PREVTOP+(PREVHEIGHT/4)-1) 13 8) FONT 5 NOFRAME
+    REPEATBUTTON "\002" HeightDownArrow AT (PREVLEFT PREVTOP+PREVHEIGHT PREVWIDTH PREVHEIGHT) FONT 5 NOFRAME
+
 END
 
 ALERT ID NewGameAlert
@@ -99,4 +98,13 @@ BEGIN
      TITLE "End Game"
      MESSAGE "This will discard the current game and begin a new one. Do you wish to continue?"
      BUTTONS "No" "Yes"
+END
+
+FORM ID BoardEditForm  AT ( 2 2 156 156 )
+MODAL
+BEGIN
+        TITLE "Custom: Edit Board Layout"
+
+    BUTTON "OK" ID BoardEditOKButton   AT (3 142 35 12)
+    BUTTON "Cancel" ID BoardEditCancelButton   AT (39 142 35 12)
 END

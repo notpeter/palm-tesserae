@@ -34,9 +34,9 @@ typedef enum DifficultyType {
 #define RED	0x00FF0000
 #define BLUE 	0x000000FF
 #define YELLOW 	0x00FFFF00
-#define GREEN 	0x00008000
-#define PURPLE	0x00800080
-#define ORANGE	0x00FF9900
+#define GREEN 	0x0000CC00
+#define PURPLE	0x00CC00CC
+#define ORANGE	0x00FFCC00
 #define GRAY	0x00999999
 //00000001 = Has +
 //00000010 = Has []
@@ -833,7 +833,8 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
 	handled = true;	
       }
       else if (FrmAlert(NewGameAlert)) {
-	ListType *listP;
+	/*
+      	ListType *listP;
 	GameSettings *gs = &Game.theBoard.g;
 	gs->showPossible = Ctl_GetVal(frm, ShowPossibleMoves);
 
@@ -841,7 +842,7 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
 	gs->height = (LstGetSelection(listP) + 5);
 	listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, WidthList));
 	gs->width = (LstGetSelection(listP) + 5);
-
+*/
 	FreeBoard(&Game.theBoard);
 	newGame();
 
@@ -862,12 +863,13 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
   }
   else if (eventP->eType == frmOpenEvent) {
     GameSettings *gs = &Game.theBoard.g;
+    
     ControlType *ctl;
     Char *label;
     ListType *listP;
 
     prefsTouched = false;
-
+    /*
     Ctl_SetVal(frm, ShowPossibleMoves, gs->showPossible);
 
     //FIX THIS -- IT IS BROKEN (2002-Aug-15)
@@ -891,7 +893,7 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
     //Makes it so that when the user clicks on the list, the currently
     //set preference is in the selection box.
     LstMakeItemVisible(listP, gs->width - 5);
-
+    */
     FrmDrawForm (frm);
     handled = true;
   }
