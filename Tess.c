@@ -656,7 +656,62 @@ static void MoveUndo(aGame *g, Int16 count) {
   DrawALoc(b, m.to);
 }
 
-//static Boolean move(Board *b, UInt16 src, UInt16 dest) {
+static UInt8 validMoves(aGame *g, UInt16 index) {
+  Board *b = &(g->theBoard);
+  typedef union daMoves {
+    UInt8 byte;
+    struct d {
+      unsigned nn: 1;
+      unsigned ne: 1;
+      unsigned ee: 1;
+      unsigned se: 1;
+      unsigned ss: 1;
+      unsigned sw: 1;
+      unsigned ww: 1;
+      unsigned nw: 1;
+    } d;
+  } daMoves;
+  daMoves c; //what moves -CAN- be done (don't involve leaving the board)
+  daMoves l; //what moves are legal (subset of above;
+  
+  c.byte = 0xFF; //Starts with all moves are possible.
+
+  //If it is not on the board, or if the space is empty. no valid moves.
+  if (!(b->g.board[index].onBoard &&
+	b->g.board[index].attributes))
+    return 0;
+
+  //in the first two rows -- no n, ne, nw
+  if ((index / b->g.width) < 1)
+    c.d.nn = c.d.ne = c.d.nw = 0;
+  //in first two columns -- no nw, w, sw
+  if ((index % b->g.height) > 1)
+    c.d.nw = c.d.ww = c.d.sw = 0;
+  //in the last two rows -- no sw, s, se
+  if ((index / b->g.width) < b->g.height - 2)
+    c.d.sw = c.d.ss = c.d.se = 0;
+  //in the last two columns -- no se, e, ne
+  if ((index % b->g.height) < b->g.width - 2)
+    c.d.se = c.d.ee = c.d.ne = 0;
+
+  l = c;
+
+  /*  
+  {
+  PointType srcPt, midPt, destPt;
+  srcPt = GetXY(i, src);
+  destPt = GetXY(b, dest);
+  if (checkSquares(srcPt, destPt)) {
+  }
+  }*/
+}
+static Boolean anyValidMoves(aGame *g) {
+  UInt16 i;
+  for (i=0; i < g->theBoard.size; i++)
+    if (validMoves(g, i))
+      return 1;
+  return 0;
+}
 static Boolean move(aGame *g, UInt16 src, UInt16 dest) {
   Board *b = &(g->theBoard);
   UInt16 mid;
