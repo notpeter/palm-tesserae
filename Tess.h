@@ -70,6 +70,22 @@ typedef struct GameSettings {
   Boolean showPossible;
 } GameSettings;
 
+//which moves are possible and what their result would be. (
+typedef union daMoves {
+  //only 24bits currently used.
+  UInt32 bytes;
+  struct d {
+    unsigned nn: 3;
+    unsigned ne: 3;
+    unsigned ee: 3;
+    unsigned se: 3;
+    unsigned ss: 3;
+    unsigned sw: 3;
+    unsigned ww: 3;
+    unsigned nw: 3;
+    } d;
+} daMoves;
+
 typedef struct Board {
   GameSettings g;
   //You only actually need a pointer cause you can use the recover handle
@@ -78,13 +94,16 @@ typedef struct Board {
   UInt16 squareWidth;
   UInt16 squareHeight;
   RectangleType rect;
-  Int16 pieceSelected;
+  Int16 pieceSelected;	//== -1 when nothin selected, otherwise 0 to num tiles
   Int32 blinkRate;
   Int32 timeToBlink;
   Boolean blinking;
   Boolean blinkOn;
+  daMoves possibleMoves;
 } Board;
 
+//each move (which square is started at, jumped over,
+//and landed on) and what it contained before the move. (each tile)
 typedef struct Move {
   UInt16 from : 10;
   UInt16 over : 10;
@@ -98,6 +117,7 @@ typedef struct aGame {
   //You only actually need a pointer cause you can use the recover handle
   //functions to get the handle when it is needed for resizing/freeing memory
   Board theBoard;
+  //which moves are possible
   Move *moves;
   UInt16 numMoves;
 } aGame;
@@ -138,20 +158,6 @@ static struct {
   Boolean Color;
 } DeviceSettings;
 //End Global Variables
-typedef union daMoves {
-  UInt8 byte;
-  struct d {
-    unsigned nn: 1;
-    unsigned ne: 1;
-    unsigned ee: 1;
-    unsigned se: 1;
-    unsigned ss: 1;
-    unsigned sw: 1;
-    unsigned ww: 1;
-    unsigned nw: 1;
-    } d;
-} daMoves;
-
 
 PointType GetXY(Board *b, UInt16 Index);
 #endif
