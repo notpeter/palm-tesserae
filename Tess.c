@@ -9,10 +9,11 @@
 
 #define ROMVersionMinimum				0x03000000
 #define RomOS35						0x03500000
-#define TessDBName"TesseraeDB"
+#define TessDBName	"TesseraeDB"
 #define TessDBType	'DATA'
 #define TessCreatorID	'TeSS'
 #define TessPrefID	0
+#define TessPrefVersionNumber 1
 
 #define LEVEL_BEGINNER 1
 #define LEVEL_INTERMEDIATE 2
@@ -40,16 +41,31 @@
 
 typedef UInt8 Square;
 
-typedef struct Board {
-  Square *board;	//You must allocate the necessary memory for board
-  UInt8 width;		//of size width*height
-  UInt8 height;
-  UInt16 size;		//Bastard.
-  UInt8 squareWidth;
-  UInt8 squareHeight;
-  UInt8 skillLevel;
-  RectangleType rect;
+#define MAX_SIZE_WIDTH 25 //definite max
+#define MAX_SIZE_HEIGHT 25 //definite max
+
+//Universal Settings associated with any game (can be used in conjunction
+//with the tiles and the moves for a game to recreate the game as it was played
+//previously.
+typedef struct GameSettings {
+  //This was the seed used to generate this game
+  UInt16 width;
+  UInt16 height;
+  //You only actually need a pointer cause you can use the recover handle
+  //functions to get the handle when it is needed for resizing/freeing memory 
+  Square *board;
   Boolean squarePieces;
+  Boolean showPossible;
+} GameSettings;
+
+typedef struct Board {
+  GameSettings g;
+  //You only actually need a pointer cause you can use the recover handle
+  //functions to get the handle when it is needed for resizing/freeing memory 
+  UInt16 size;
+  UInt16 squareWidth;
+  UInt16 squareHeight;
+  RectangleType rect;
   Int16 pieceSelected;
   Int32 blinkRate;
   Int32 timeToBlink;
@@ -57,19 +73,29 @@ typedef struct Board {
   Boolean blinkOn;
 } Board;
 
-typedef struct Pref {
+typedef struct Move {
+  UInt16 from : 8;
+  UInt16 to   : 8;
+} Move;
+
+/*typedef struct Pref {
   Board theBoard;
-  UInt8 width;
-  UInt8 height;
-  UInt8 skillLevel;
-  Boolean squarePieces;
-  Boolean showPossible;
+  GameSettings g;
 } Pref;
+*/
+typedef struct aGame {
+  //You only actually need a pointer cause you can use the recover handle
+  //functions to get the handle when it is needed for resizing/freeing memory
+  Board b;
+  Moves *moves;
+  UInt16 numMoves;
+} aGame;
 
 //Begin GLobal Variables
-static Board bb;
+//static Board bb;
 //Think binary counting here. the third color is 1 + 2;
-static const UInt32 colorsHex[8] = {WHITE,YELLOW,BLUE,GREEN,RED,ORANGE,PURPLE,GRAY};
+static const UInt32 colorsHex[8] = {WHITE,YELLOW,BLUE,GREEN,RED,
+				    ORANGE,PURPLE,GRAY};
 //colors for each of the possible tiles.
 static IndexedColorType colors[8];
 static Pref Game;
@@ -90,6 +116,42 @@ static struct {
 //End Global Variables
 
 
+static void MovePushMove(aGame *g, Move m) {
+  MemHandle h = MemRecoverHandle(g->moves);
+  if (g->numMoves >= (MemHandleSize(h) / sizeof(Move))) {
+    MemHandleUnlock(h);
+    MemHandleResize(h, sizeof(Move) * (g->numMoves + 8));
+    g->moves = MemHandleLock(h);
+  }
+  g->moves[g->numMoves] = m;
+  g->numMoves++;  
+}
+
+static Move MovePopMove(aGame *g) {
+  MemHandle h = MemRecoverHandle(g->moves);
+  if (g->numMoves == 0) {
+    //Empty Stack!
+    return;
+  }
+  else if ((g->numMoves + 8) < (MemHandleSize(h) / sizeof(Move))) {
+    MemHandleUnlock(h);
+    MemHandleResize(h, sizeof(Move) * (g->numMoves - 8));
+    g->numMoves -= 8;
+    g->moves = MemHandleLock(h);
+  }
+  numMoves--;  
+  return moves[g->numMoves - 2];
+}
+
+static Move MoveGetMove(aGame *g, UInt16 pos) {
+  MemHandle h = MemRecoverHandle(g->moves);
+  if (pos >= g->numMoves) {
+    //Bad Position!
+    return;
+  }
+  return moves[pos];
+}
+
 static UInt16 RandomNum(UInt16 n) {
   //this is ghetto, but fixes divide by zero issues should they arise.
 
@@ -97,6 +159,111 @@ static UInt16 RandomNum(UInt16 n) {
     return 0;
   else
     return SysRandom(0) / (1 + sysRandomMax / n);
+}
+
+static Board MakeBoard(UInt8 width, UInt8 height, Boolean squarePieces) {
+  Board b;
+  UInt16 i;
+  b.width = width;
+  b.height = height;
+  b.squarePieces = squarePieces;
+  //The -1 at the end is to take the lines between cells into account.
+  b.squareWidth = (DeviceSettings.ScreenWidth - 
+		   (DeviceSettings.ScreenBorder * 3)) / (b.width) -1;
+  b.squareHeight = (DeviceSettings.ScreenHeight - DeviceSettings.ScreenHeader -
+		    (DeviceSettings.ScreenBorder * 3)) / (b.height) -1;
+  if (b.squareWidth % 2 != 1)
+    b.squareWidth--;
+  if (b.squareHeight % 2 != 1)
+    b.squareHeight--;
+  //Make the pieces square if need be.
+  if (b.squarePieces) {
+    if (b.squareHeight >= b.squareWidth)
+      b.squareHeight = b.squareWidth;
+    else
+      b.squareWidth = b.squareHeight;
+  }
+  b.rect.topLeft.x = ((DeviceSettings.ScreenWidth -
+		    (DeviceSettings.ScreenBorder * 2) -
+		    ((b.squareWidth) * b.width)) /2);
+  b.rect.topLeft.y = (((DeviceSettings.ScreenHeight -
+		     (DeviceSettings.ScreenBorder * 2) -
+		     DeviceSettings.ScreenHeader -
+		     (b.squareHeight * b.height)) /2) +
+		   DeviceSettings.ScreenHeader);
+  b.size = width * height;
+  //b.board = MemHandleLock(MemHandleNew(sizeof(Square) * b.size));
+  for (i = 0; i < b.size; i++) {
+    //Sets the bit in b.board[i] to make it a usable part of the board
+    b.board[i] = ONBOARD_MASK;
+  }
+  return b;
+}
+
+static void FillBoardRandom(Board *b) {
+  //Level 0 means all primary color tiles
+  //Level 1 means primary and secondary color tiles
+  //Level 2 means primary, secondary and gray tiles.
+  UInt16 i, tempNum;
+  for (i = 0; i < (b->width * b->height);i++) {
+    if (ONBOARD(b->board[i])) {
+      //Clears the attribute bits that might have been set 
+      b->board[i] = ((b->board[i] >> 3) << 3);
+      //This gives us a number between 1 and 7 (0 would be invalid cause there
+      //would be no tile there.
+      if (b->skillLevel == LEVEL_BEGINNER) {
+	tempNum = RandomNum(3);
+	if (tempNum == 0) {
+	  b->board[i] += tempNum + 1;
+	}
+	else if (tempNum == 1) {
+	  b->board[i] += tempNum + 1;
+	}
+	else if (tempNum == 2) {
+	  b->board[i] += tempNum + 2;
+	}
+	else
+	  return;
+      }
+      else if (b->skillLevel == LEVEL_INTERMEDIATE) {
+	b->board[i] += RandomNum(6) + 1;
+      }
+      else {
+	b->board[i] += RandomNum(7) + 1;
+      }
+    }
+  }
+}
+static Pref GetPrefs() {
+  Pref prefs;
+  UInt16 prefsSize = sizeof(prefs);
+  if (PrefGetAppPreferences(TessCreatorID, TessPrefID, &prefs,
+			    &prefsSize, true) != noPreferenceFound) {
+    
+  }
+  else {
+    // No preferences exist yet, so set the defaults
+    prefs.width = 8;
+    prefs.theBoard.width = prefs.width;
+    prefs.height = 8;
+    prefs.theBoard.height = prefs.height;
+    prefs.skillLevel = LEVEL_BEGINNER;
+    prefs.theBoard.skillLevel = prefs.skillLevel;
+    prefs.squarePieces = true;
+    prefs.theBoard.squarePieces = prefs.squarePieces;
+    prefs.showPossible = true;
+    prefs.theBoard = MakeBoard(prefs.theBoard.width,
+			       prefs.theBoard.height,
+			       prefs.theBoard.squarePieces);
+    prefs.theBoard.pieceSelected = -1;
+    prefs.theBoard.blinkRate = SysTicksPerSecond() / 2;
+    prefs.theBoard.blinking = false;
+    prefs.theBoard.blinkOn = false;
+    
+    FillBoardRandom(&prefs.theBoard);
+  }
+
+  return prefs;
 }
 
 static Int16 GetIndex(Board *b, UInt8 x, UInt8 y) {
@@ -142,87 +309,15 @@ static UInt16 ScreenCoordToBoardIndex(Board *b, Coord x, Coord y) {
     return -1;
 }
 
-static void FillBoardRandom(Board *b) {
-  //Level 0 means all primary color tiles
-  //Level 1 means primary and secondary color tiles
-  //Level 2 means primary, secondary and gray tiles.
-  UInt16 i, tempNum;
-  for (i = 0; i < (b->width * b->height);i++) {
-    if (ONBOARD(b->board[i])) {
-      //Clears the attribute bits that might have been set 
-      b->board[i] = ((b->board[i] >> 3) << 3);
-      //This gives us a number between 1 and 7 (0 would be invalid cause there
-      //would be no tile there.
-      if (b->skillLevel == LEVEL_BEGINNER) {
-	tempNum = RandomNum(3);
-	if (tempNum == 0) {
-	  b->board[i] += tempNum + 1;
-	}
-	else if (tempNum == 1) {
-	  b->board[i] += tempNum + 1;
-	}
-	else if (tempNum == 2) {
-	  b->board[i] += tempNum + 2;
-	}
-	else
-	  return;
-      }
-      else if (b->skillLevel == LEVEL_INTERMEDIATE) {
-	b->board[i] += RandomNum(6) + 1;
-      }
-      else {
-	b->board[i] += RandomNum(7) + 1;
-      }
-    }
-  }
-}
-
-static Board MakeBoard(UInt8 width, UInt8 height, Boolean squarePieces) {
-  Board b;
-  UInt16 i;
-  b.width = width;
-  b.height = height;
-  b.squarePieces = squarePieces;
-  //The -1 at the end is to take the lines between cells into account.
-  b.squareWidth = (DeviceSettings.ScreenWidth - 
-		   (DeviceSettings.ScreenBorder * 3)) / (b.width) -1;
-  b.squareHeight = (DeviceSettings.ScreenHeight - DeviceSettings.ScreenHeader -
-		    (DeviceSettings.ScreenBorder * 3)) / (b.height) -1;
-  if (b.squareWidth % 2 != 1)
-    b.squareWidth--;
-  if (b.squareHeight % 2 != 1)
-    b.squareHeight--;
-  //Make the pieces square if need be.
-  if (b.squarePieces) {
-    if (b.squareHeight >= b.squareWidth)
-      b.squareHeight = b.squareWidth;
-    else
-      b.squareWidth = b.squareHeight;
-  }
-  b.rect.topLeft.x = ((DeviceSettings.ScreenWidth -
-		    (DeviceSettings.ScreenBorder * 2) -
-		    ((b.squareWidth) * b.width)) /2);
-  b.rect.topLeft.y = (((DeviceSettings.ScreenHeight -
-		     (DeviceSettings.ScreenBorder * 2) -
-		     DeviceSettings.ScreenHeader -
-		     (b.squareHeight * b.height)) /2) +
-		   DeviceSettings.ScreenHeader);
-  b.size = width * height;
-  b.board = MemHandleLock(MemHandleNew(sizeof(Square) * b.size));
-  for (i = 0; i < b.size; i++) {
-    //Sets the bit in b.board[i] to make it a usable part of the board
-    b.board[i] = ONBOARD_MASK;
-  }
-  return b;
-}
-
+//Was more useful when I used a handle for the board within board,
+//but now its just a static array.
 static void FreeBoard(Board *b) {
   if (b->size) {
-    if (MemPtrRecoverHandle(b->board)) {
-      MemHandleFree(MemPtrRecoverHandle(b->board));
-      //Clear any other contents so it won't be used again.
-      MemSet(b, sizeof(Board), 0x00);
-    }
+    //if (MemPtrRecoverHandle(b->board)) {
+    //MemHandleFree(MemPtrRecoverHandle(b->board));
+    //Clear any other contents so it won't be used again.
+    MemSet(b, sizeof(Board), 0x00);
+    //}
   }
 }
 
@@ -309,7 +404,7 @@ static void DrawBox(Board *b, UInt16 index) {
   //FrameBitsType frameBits;
   RectangleType r;
   PointType p;
-  if (index != bb.pieceSelected) {
+  if (index != Game.theBoard.pieceSelected) {
     p = GetXY(b, index);
     r.topLeft.x = b->rect.topLeft.x + ((b->squareWidth+1) * p.x);
     r.topLeft.y = b->rect.topLeft.y + ((b->squareHeight+1) * p.y);
@@ -438,14 +533,15 @@ static Boolean move(Board *b, UInt16 src, UInt16 dest) {
   return false;
 }
 static void newGame() {
-  bb = MakeBoard(8, 7, false);
-  bb.skillLevel = LEVEL_BEGINNER;
-  bb.pieceSelected = -1;
-  bb.blinkRate = SysTicksPerSecond() / 2;
-  bb.blinking = false;
-  bb.blinkOn = false;
-  FillBoardRandom(&bb);
-  DrawSquares(&bb);
+  Game = GetPrefs();
+  //bb = MakeBoard(Game.width, Game.height, Game.squarePieces);
+  Game.theBoard.pieceSelected = -1;
+  Game.theBoard.blinkRate = SysTicksPerSecond() / 2;
+  Game.theBoard.blinking = false;
+  Game.theBoard.blinkOn = false;
+  Game.theBoard.skillLevel = LEVEL_BEGINNER;
+  FillBoardRandom(&Game.theBoard);
+  DrawSquares(&Game.theBoard);
 }
 
 static RGBColorType ColorHexToRGB(Int32 hex) {
@@ -520,22 +616,6 @@ static Err RomVersionCompatible (UInt32 requiredVersion, UInt16 launchFlags) {
   return (0);
 }
 
-static void SetPrefs(Pref * prefs) {
-  UInt16 prefsSize = sizeof(Pref);
-  
-  if (PrefGetAppPreferences(TessCreatorID, TessPrefID, prefs,
-			    &prefsSize, true) != noPreferenceFound) {
-  }
-  else {
-    // No preferences exist yet, so set the defaults
-    prefs->width = 8;
-    prefs->width = 8;
-    prefs->skillLevel = LEVEL_BEGINNER;
-    prefs->squarePieces = true;
-    prefs->showPossible = true;
-  }}
-
-
 static Err StartApplication(UInt16 launchFlags) {
   Err  err;
   err = RomVersionCompatible (ROMVersionMinimum, launchFlags);
@@ -544,7 +624,6 @@ static Err StartApplication(UInt16 launchFlags) {
   
   setupDeviceSettings();
   
-  SetPrefs(&Game);
   /*TessDB = DmOpenDatabaseByTypeCreator(TessDBType, TessCreatorID, dmModeReadWrite);
   if (! TessDB) {
     err = DmCreateDatabase(0, TessDBName, TessCreatorID, TessDBType, false);
@@ -555,7 +634,7 @@ static Err StartApplication(UInt16 launchFlags) {
       return DmGetLastErr();
       }*/
 
-  
+  Game = GetPrefs();
 
   FrmGotoForm(MainForm);
   return 0;
@@ -565,49 +644,52 @@ static Err StartApplication(UInt16 launchFlags) {
 static void StopApplication(void) {
   
   //DmCloseDatabase(TessDB);
-  FreeBoard(&bb);
+  PrefSetAppPreferences(TessCreatorID, TessPrefID, TessPrefVersionNumber,
+			&Game, sizeof(Game), true);
+  FreeBoard(&Game.theBoard);
   if (DeviceSettings.RomVersion >= RomOS35)
     WinPopDrawState();
   FrmCloseAllForms();
 }
 
 static Boolean MainMenuHandleEvent(UInt16 menuID) {
-    Boolean    handled = false;
-    FormType   *form = FrmGetActiveForm(), *frmP;
-    UInt16 whichButton;
-
-    switch (menuID) {
-    case MainGamePreferences:
-      frmP = FrmInitForm(FrmPreferences);
-      /* initialize your controls on the form here */
-      // open the dialog, and wait until a button is pressed to close it.
-      whichButton = FrmDoDialog(frmP);
-      if (whichButton == PreferencesOKButton) {
-	/* get data from controls on the form to save/apply changes */
-      }
-      FrmDeleteForm(frmP);
-      
-      //FrmPopupForm(FrmPreferences);
-      handled = true;
-      break;
-    case MainOptionsAbout:
-      FrmAlert(AboutAlert);
-      handled = true;
-      break;  
-    case MainGameInstructions:
-      FrmHelp(InstructionsStr);
-      handled = true;
-      break;  
-    case MainGameNew:
-      FreeBoard(&bb);
-      newGame();
-      handled = true;
-      break;  
-    default:
-      break;
+  Boolean    handled = false;
+  //FormType   *form = FrmGetActiveForm();
+  FormType   *frmP;
+  UInt16 whichButton;
+  
+  switch (menuID) {
+  case MainGamePreferences:
+    frmP = FrmInitForm(FrmPreferences);
+    /* initialize your controls on the form here */
+    // open the dialog, and wait until a button is pressed to close it.
+    whichButton = FrmDoDialog(frmP);
+    if (whichButton == PreferencesOKButton) {
+      /* get data from controls on the form to save/apply changes */
     }
+    FrmDeleteForm(frmP);
     
-    return handled;
+    //FrmPopupForm(FrmPreferences);
+    handled = true;
+    break;
+  case MainOptionsAbout:
+    FrmAlert(AboutAlert);
+    handled = true;
+    break;  
+  case MainGameInstructions:
+    FrmHelp(InstructionsStr);
+    handled = true;
+    break;  
+  case MainGameNew:
+    FreeBoard(&Game.theBoard);
+    newGame();
+    handled = true;
+    break;  
+  default:
+    break;
+  }
+  
+  return handled;
 }
 
 
@@ -615,22 +697,27 @@ static Boolean MainFormHandleEvent(EventPtr event)
 {
   Boolean	handled = false;
   FormType	*form = FrmGetActiveForm();
-  UInt16 boardIndex;
+  UInt16 boardIndex, formID;
 
   switch (event->eType) {
   case frmOpenEvent:
+    formID = event->data.frmOpen.formID;
     FrmDrawForm(form);
+    if (formID == MainForm) {
+      DrawSquares(&Game.theBoard);
+    }
     handled = true;
     break;
   case ctlSelectEvent:
     switch (event->data.ctlSelect.controlID) {
     case MainFormNewButton:
-      FreeBoard(&bb);
+      FreeBoard(&Game.theBoard);
       newGame();
       handled = true;
       break;
     case MainFormRDButton:
-      DrawSquares(&bb);
+      //Game.skillLevel = LEVEL_INTERMEDIATE;
+      DrawSquares(&Game.theBoard);
       handled = true;
       break;
     default:
@@ -638,29 +725,30 @@ static Boolean MainFormHandleEvent(EventPtr event)
     }
     break;
     case penDownEvent:
-    boardIndex = ScreenCoordToBoardIndex(&bb, event->screenX, event->screenY);
+    boardIndex = ScreenCoordToBoardIndex(&Game.theBoard, event->screenX, event->screenY);
     if (-1 != boardIndex) {
         //If there is no piece selected, select the piece.
-      if (-1 == bb.pieceSelected) {
-	if (GETATTRIBUTES(bb.board[boardIndex]) != 0x00) {
-	  DrawBox(&bb, boardIndex);
-	  bb.pieceSelected = boardIndex;
+      if (-1 == Game.theBoard.pieceSelected) {
+	if (GETATTRIBUTES(Game.theBoard.board[boardIndex]) != 0x00) {
+	  DrawBox(&Game.theBoard, boardIndex);
+	  Game.theBoard.pieceSelected = boardIndex;
 	}
       }
       //If the same piece has been clicked again, deselect that piece
-      else if (boardIndex == bb.pieceSelected) {
-	DrawBox(&bb, boardIndex);
-	bb.pieceSelected = -1;
+      else if (boardIndex == Game.theBoard.pieceSelected) {
+	DrawBox(&Game.theBoard, boardIndex);
+	Game.theBoard.pieceSelected = -1;
       }
       else {
-	DrawBox(&bb, bb.pieceSelected);
-	if (move(&bb, bb.pieceSelected, boardIndex)) {
-	  //DrawBox(&bb, boardIndex);
-	  bb.pieceSelected = -1;
+	DrawBox(&Game.theBoard, Game.theBoard.pieceSelected);
+	if (move(&Game.theBoard, Game.theBoard.pieceSelected, boardIndex)) {
+	  //DrawBox(&Game.theBoard, boardIndex);
+	  Game.theBoard.pieceSelected = -1;
 	}
       }
       handled = true;
     }
+    //the pen down event is not within the board.
     else {
     }
     break;
