@@ -15,8 +15,8 @@ PRCFLAGS	= -t appl -o $(PRC) -n $(ICONTEXT) -c $(APPID)
 # Uncomment this if you want to build a GDB-debuggable version
 # mdebug-labels allows the log files in the palmOS debugger to put names
 # on it's stack traces.  Super useful. (p67 Using Palm OS Emulator PDF)
-CFLAGS = -O0 -Wall -g -mdebug-labels
-#CFLAGS = -O0 -g -mdebug-labels
+#CFLAGS = -O0 -Wall -g -mdebug-labels
+CFLAGS = -O0 -g -mdebug-labels
 #CFLAGS = -O2
 
 .PHONY: depend dep clean veryclean dd

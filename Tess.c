@@ -15,7 +15,7 @@
 #define TessCreatorID	'TeSS'
 #define TessPrefVers    0x0001
 
-//draws a box over a give tile (and rounds it if specified -- making a circle)
+
 static void DrawBox(Board *b, UInt16 index, Boolean Round) {
   UInt8 j, k = 0;
   //FrameBitsType frameBits;
@@ -56,95 +56,8 @@ static void DrawBox(Board *b, UInt16 index, Boolean Round) {
   //b->g.board[pieceSelected]
 }
 
-
-static void DrawCircleInRect(RectangleType r) {
-  UInt8 j = 0;
-  //Palm says the whole FrameBitsType thing doesn't have a garunteed structure
-  //So I don't know if this will work in future revisions.
-  FrameBitsType frameBits;
-  frameBits.word = rectangleFrame;
-
-  r.topLeft.x += j;
-  r.topLeft.y += j;
-  r.extent.x  -= (j * 2) -1;
-  r.extent.y  -= (j * 2) -1;
-  frameBits.bits.cornerDiam = (r.extent.x /2);
-  frameBits.bits.width = 1;
-  WinDrawRectangleFrame(frameBits.word, &r);
-}
-static void DrawPlusInRect(RectangleType r) {
-  WinDrawLine(r.topLeft.x + (r.extent.x /2), r.topLeft.y,
-	      r.topLeft.x + (r.extent.x /2), r.topLeft.y + r.extent.y);
-  WinDrawLine(r.topLeft.x, r.topLeft.y + (r.extent.y /2),
-	      r.topLeft.x + r.extent.x, r.topLeft.y + (r.extent.y /2));
-}
-/*
-static void DrawXInRect(RectangleType r) {
-  WinDrawLine(r.topLeft.x, r.topLeft.y,
-	      r.topLeft.x + r.extent.x, r.topLeft.y + r.extent.y);
-  WinDrawLine(r.topLeft.x + r.extent.x, r.topLeft.y,
-  r.topLeft.x, r.topLeft.y + r.extent.y);
-  }
-*/
-static void DrawSquareInRect(RectangleType r) {
-  UInt8 j = 2;
-  FrameType frame = rectangleFrame;
-  r.topLeft.x += j;
-  r.topLeft.y += j;
-  r.extent.x  -= (j * 2) -1;
-  r.extent.y  -= (j * 2) -1;
-  WinDrawRectangleFrame(frame, &r);
-}
-
-//This could be a billion times faster if I had a window setup for each
-//of the different tiles and then copied them in rather than drawing each
-//one on it's own.
-static void DrawOneSquare(Board *b, PointType p, Square s) {
-  RectangleType color, r;
-  IndexedColorType oldBGIndex;
-  //The +1 and -3 keep it within the bounds of the rectangle.
-  r.topLeft.x = p.x +2;
-  r.topLeft.y = p.y +2;
-  r.extent.x = b->squareWidth -5;
-  r.extent.y = b->squareHeight -5;
-  if (DeviceSettings.Color) {
-    color.topLeft = p;
-    color.extent.x = b->squareWidth;
-    color.extent.y = b->squareHeight; 
-    oldBGIndex = WinSetBackColor(colors[s.attributes]);
-    WinEraseRectangle(&color, 0);
-    WinSetBackColor(oldBGIndex);
-  }
-  if ((s.attributes >> 0) %2) {    
-    DrawPlusInRect(r);
-  }
-  if ((s.attributes >> 1) %2) {
-    DrawSquareInRect(r);
-  }
-  if ((s.attributes >> 2) %2) {
-    DrawCircleInRect(r);
-  }
-}
-
-//Draws/ReDraws a given square
-static void DrawALoc(Board *b, UInt16 loc){
-  Square s = b->g.board[loc];
-  PointType boardPos = GetXY(b, loc);
-  RectangleType r;
-  r.topLeft.x = (b->rect.topLeft.x + ((1 + b->squareWidth) * boardPos.x));
-  r.topLeft.y = (b->rect.topLeft.y + ((1 + b->squareHeight) * boardPos.y));
-  r.extent.x = b->squareWidth;
-  r.extent.y = b->squareHeight;
-  WinEraseRectangle(&r, 0);
-  //there is nothing to draw if there are no attributes.
-  if (s.attributes != 0) {
-    DrawOneSquare(b, r.topLeft, s);
-  }
-}
-
-//Only returns two bits of the UInt8
 //assumes coordinates are already correct
-static UInt8 isValidMove(Board *b, UInt16 src, UInt16 mid, UInt16 dest) {
+static Boolean isValidMove(Board *b, UInt16 src, UInt16 mid, UInt16 dest) {
   if ((b->g.board[src].attributes &&
        b->g.board[mid].attributes) &&
       //And either the src and the middle are primaries.
@@ -156,12 +69,10 @@ static UInt8 isValidMove(Board *b, UInt16 src, UInt16 mid, UInt16 dest) {
        ((b->g.board[src].attributes == b->g.board[dest].attributes) ||
 	//or the destination has nothing that the source does
 	((b->g.board[src].attributes & b->g.board[dest].attributes) == 0)))) {
-    //return what the resulting destination piece would be.
-    //any attributes from either (bitwise OR)
-    return (b->g.board[src].attributes | b->g.board[dest].attributes);
+    return true;
   }
   else
-    return 0x00;
+    return false;
 }
 
 static daMoves validMoves(aGame *g, UInt16 index) {
@@ -170,35 +81,31 @@ static daMoves validMoves(aGame *g, UInt16 index) {
   
   UInt16 src = index, mid, dest;
 
-  l.bytes = 0xFFFFFFFF; //Starts with all moves are possible.
+  l.byte = 0xFF; //Starts with all moves are possible.
 
   //If it is not on the board, or if the space is empty. no valid moves.
   if (!(b->g.board[index].onBoard &&
 	b->g.board[index].attributes)) {
     daMoves g;
-    g.bytes = 0;
+    g.byte = 0;
     return g;
   }
- 
-  //when thinking about this, don't forget that values of 
-  //index go from 0 to (b->g.width * b.height -1) and thus
-  //(index % b->g.width) varies from 0 to (b->g.width - 1)
-
-  //DETERMINE WHICH MOVES WE SHOULD CHECK (IN BOUNDS)
-  
   //in the first two rows -- no n, ne, nw
-  if ((index / b->g.width) < 2)
+  if ((index / b->g.width) < 2) {
     l.d.nn = l.d.ne = l.d.nw = 0;
+  }
   //in the last two rows -- no sw, s, se
-  if ((index / b->g.width) > b->g.height - 3)
+  if ((index / b->g.width) > b->g.height - 2) {
     l.d.sw = l.d.ss = l.d.se = 0;
+  }
   //in first two columns -- no nw, w, sw
-  if ((index % b->g.width) < 2)
+  if ((index % b->g.width) < 2) {
     l.d.nw = l.d.ww = l.d.sw = 0;
+  }
   //in the last two columns -- no se, e, ne
-  if (b->g.width - (index % b->g.width) < 3)
+  if ((index % b->g.width) > b->g.width - 2) {
     l.d.se = l.d.ee = l.d.ne = 0;
-
+  }
   if (l.d.nn) {
     mid = src - b->g.width;
     dest = (src - (b->g.width * 2));
@@ -241,70 +148,58 @@ static daMoves validMoves(aGame *g, UInt16 index) {
   }
   return l;
 }
-
 static Boolean anyValidMoves(aGame *g) {
   UInt16 i;
   for (i=0; i < g->theBoard.size; i++)
-    if ((validMoves(g, i)).bytes)
+    if ((validMoves(g, i)).byte)
       return 1;
   return 0;
 }
+//The erase flag toggles whether the function is erasing or drawing.
+static void DrawPossibilities(Board *b, daMoves l, UInt16 boardIndex,
+			     Boolean erase) {
+  //Fix this so it draws circles, squares or something else depending on
+  //what the resulting peice will be.
 
-//draws a dot ove
-//only the lower three bits of attributes are used
-//if erase is set true, it doesn't draw dots, it just redraws the tile
-static void DrawDotType(Board *b, UInt16 boardIndex, UInt8 attributes,
-			Boolean erase) {
-  if (erase)
-    DrawALoc(b, boardIndex);
-  //draw the dot
-  else if (ISPOWEROF2(attributes)) {
+  DrawBox(b, boardIndex, true);
+  if (l.d.nn) {
+    DrawBox(b, (boardIndex - (b->g.width * 2)), true);
+  }
+  if (l.d.ne) {
+    DrawBox(b, (boardIndex - (b->g.width * 2)) + 2, true);
+  }
+  if (l.d.ee) {
+    DrawBox(b, boardIndex + 2, true);
+  }
+  if (l.d.se) {
+    DrawBox(b, (boardIndex + (b->g.width * 2)) + 2, true);
+  }
+  if (l.d.ss) {
+    DrawBox(b, boardIndex + (b->g.width * 2), true);
+  }
+  if (l.d.sw) {
+    DrawBox(b, boardIndex + (b->g.width * 2) - 2, true);
+  }
+  if (l.d.ww) {
+    DrawBox(b, boardIndex - 2, true);
+  }
+  if (l.d.nw) {
+    DrawBox(b, (boardIndex - (b->g.width * 2)) - 2, true);
+  }
+  //Square s = b->g.board[boardIndex];
+  /*if (ISPOWEROF2(s.attributes)) {
     //Draw a circle
     DrawBox(b, boardIndex, true);
   }
-  //it's got all the attributes (tertiary)
-  else if (attributes == 7) {
-    DrawBox(b, boardIndex, false);
-    //someday I will write a draw triangle function, but not today
-    //DrawTrinagle(b, boardIndex, false);
-  }
-    //it's got two of the attributes (secondary)
   else {
+    //Draw a square
     DrawBox(b, boardIndex, false);
-  }
+    }*/
 }
-
-
-//The erase flag toggles whether the function is erasing or drawing.
-static void DrawPossibilities(Board *b, UInt16 boardIndex,
-			      Boolean erase) {
-  daMoves *m = &(b->possibleMoves);
-  if (m->d.nn) {
-    DrawDotType(b, (boardIndex - (b->g.width * 2)), m->d.nn, erase);
-  }
-  if (m->d.ne) {
-    DrawDotType(b, (boardIndex - (b->g.width * 2) + 2), m->d.ne, erase);
-  }
-  if (m->d.ee) {
-    DrawDotType(b, boardIndex + 2, m->d.ee, erase);
-  }
-  if (m->d.se) {
-    DrawDotType(b, (boardIndex + (b->g.width * 2)) + 2, m->d.se, erase);
-  }
-  if (m->d.ss) {
-    DrawDotType(b, boardIndex + (b->g.width * 2), m->d.ss, erase);
-  }
-  if (m->d.sw) {
-    DrawDotType(b, boardIndex + (b->g.width * 2) - 2, m->d.sw, erase);
-  }
-  if (m->d.ww) {
-    DrawDotType(b, boardIndex - 2, m->d.ww, erase);
-  }
-  if (m->d.nw) {
-    DrawDotType(b, (boardIndex - (b->g.width * 2)) - 2, m->d.nw, erase);
-  }
+static void DrawPossibleMoves(aGame *g, UInt16 index) {
+  daMoves f = validMoves(g, index);
+  DrawPossibilities(&(g->theBoard), f, index, false);
 }
-
 static void updateMoveCounterDisplay(UInt32 numMoves) {
   FormType *frm = FrmGetActiveForm();
   Char numMovesStr[maxStrIToALen];
@@ -491,7 +386,7 @@ static aGame GetSavedGame() {
   ag.theBoard.g.skillLevel = defaultDifficulty;
   ag.theBoard.g.showPossible = true;
   ag.theBoard.pieceSelected = -1;
-  ag.theBoard.blinkRate = SysTicksPerSecond() / 2;
+//  ag.theBoard.blinkRate = SysTicksPerSecond() / 2;
   ag.theBoard.blinking = false;
   ag.theBoard.blinkOn = false;
   
@@ -587,30 +482,100 @@ static void FreeBoard(Board *b) {
   }
 }
 
-static void DrawDots(aGame *g, UInt16 boardIndex) {
-  Board *b = &(g->theBoard);
-  Square s = b->g.board[boardIndex];
 
-  //if a piece is selected
-  if (g->theBoard.pieceSelected >= 0) {
-    //draw a dot (of appropriate type) on the piece selected
-    DrawDotType(b, boardIndex, s.attributes, false);
-    
-    //draw possible moves if desired
-    //if (Game.theBoard.g.showPossible) {
-    if (true) {
-      g->theBoard.possibleMoves = validMoves(g, boardIndex);
-      DrawPossibilities(&(g->theBoard), boardIndex, false);
+static void DrawCircleInRect(RectangleType r) {
+  UInt8 j = 0;
+  //Palm says the whole FrameBitsType thing doesn't have a garunteed structure
+  //So I don't know if this will work in future revisions.
+  FrameBitsType frameBits;
+  frameBits.word = rectangleFrame;
+
+  r.topLeft.x += j;
+  r.topLeft.y += j;
+  r.extent.x  -= (j * 2) -1;
+  r.extent.y  -= (j * 2) -1;
+  frameBits.bits.cornerDiam = (r.extent.x /2);
+  frameBits.bits.width = 1;
+  WinDrawRectangleFrame(frameBits.word, &r);
+}
+static void DrawPlusInRect(RectangleType r) {
+  WinDrawLine(r.topLeft.x + (r.extent.x /2), r.topLeft.y,
+	      r.topLeft.x + (r.extent.x /2), r.topLeft.y + r.extent.y);
+  WinDrawLine(r.topLeft.x, r.topLeft.y + (r.extent.y /2),
+	      r.topLeft.x + r.extent.x, r.topLeft.y + (r.extent.y /2));
+}
+/*
+static void DrawXInRect(RectangleType r) {
+  WinDrawLine(r.topLeft.x, r.topLeft.y,
+	      r.topLeft.x + r.extent.x, r.topLeft.y + r.extent.y);
+  WinDrawLine(r.topLeft.x + r.extent.x, r.topLeft.y,
+  r.topLeft.x, r.topLeft.y + r.extent.y);
+  }
+*/
+static void DrawSquareInRect(RectangleType r) {
+  UInt8 j = 2;
+  FrameType frame = rectangleFrame;
+  r.topLeft.x += j;
+  r.topLeft.y += j;
+  r.extent.x  -= (j * 2) -1;
+  r.extent.y  -= (j * 2) -1;
+  WinDrawRectangleFrame(frame, &r);
+}
+//This could be a billion times faster if I had a window setup for each
+//of the different tiles and then copied them in rather than drawing each
+//one on it's own.
+static void DrawOneSquare(Board *b, PointType p, Square s) {
+  RectangleType color, r;
+  IndexedColorType oldBGIndex;
+  //The +1 and -3 keep it within the bounds of the rectangle.
+  r.topLeft.x = p.x +2;
+  r.topLeft.y = p.y +2;
+  r.extent.x = b->squareWidth -5;
+  r.extent.y = b->squareHeight -5;
+  if (DeviceSettings.Color) {
+    color.topLeft = p;
+    color.extent.x = b->squareWidth;
+    color.extent.y = b->squareHeight; 
+    oldBGIndex = WinSetBackColor(colors[s.attributes]);
+    WinEraseRectangle(&color, 0);
+    WinSetBackColor(oldBGIndex);
+  }
+  if ((s.attributes >> 0) %2) {    
+    DrawPlusInRect(r);
+  }
+  if ((s.attributes >> 1) %2) {
+    DrawSquareInRect(r);
+  }
+  if ((s.attributes >> 2) %2) {
+    DrawCircleInRect(r);
+  }
+}
+
+static void DrawALoc(Board *b, UInt16 loc){
+  Square s = b->g.board[loc];
+  PointType boardPos = GetXY(b, loc);
+  RectangleType r;
+  r.topLeft.x = (b->rect.topLeft.x + ((1 + b->squareWidth) * boardPos.x));
+  r.topLeft.y = (b->rect.topLeft.y + ((1 + b->squareHeight) * boardPos.y));
+  r.extent.x = b->squareWidth;
+  r.extent.y = b->squareHeight;
+  WinEraseRectangle(&r, 0);
+  DrawOneSquare(b, r.topLeft, s);
+}
+static void DrawSelection(Board *b, UInt16 boardIndex) {
+  Square s = b->g.board[boardIndex];
+  if (boardIndex != b->pieceSelected) {
+    if (ISPOWEROF2(s.attributes)) {
+      //Draw a circle
+      DrawBox(b, boardIndex, true);
+    }
+    else {
+      //Draw a square
+      DrawBox(b, boardIndex, false);
     }
   }
   else {
-    //redraw the selected piece itself.
     DrawALoc(b, boardIndex);
-    //undraw possible moves if desired
-    //if (Game.theBoard.g.showPossible) {
-    if (true) {
-      DrawPossibilities(&(g->theBoard), boardIndex, false);
-    }
   }
 }
 static void DrawSquares(Board *b) {
@@ -757,9 +722,6 @@ static Boolean move(aGame *g, UInt16 src, UInt16 dest) {
 	DrawALoc(b, src);
 	DrawALoc(b, mid);
 	DrawALoc(b, dest);
-	
-      DrawPossibilities(&(g->theBoard), src, true);
-	g->theBoard.possibleMoves.bytes = 0;
 	return(true);
       }
     }
@@ -771,7 +733,7 @@ static void newGame() {
   //Game = GetSavedGame();
   Game.theBoard = MakeBoard(Game.theBoard.g.width, Game.theBoard.g.height);
   Game.theBoard.pieceSelected = -1;
-  Game.theBoard.blinkRate = SysTicksPerSecond() / 2;
+  //Game.theBoard.blinkRate = SysTicksPerSecond() / 2;
   Game.theBoard.blinking = false;
   Game.theBoard.blinkOn = false;
   Game.theBoard.g.skillLevel = difficultyEasy;
@@ -1027,13 +989,6 @@ static Boolean MainMenuHandleEvent(UInt16 menuID) {
   
   switch (menuID) {
   case MainGamePreferences:
-    //make sure no piece is selected (cause after we exit preferences we
-    //would have to redraw it then and that might confuse people.
-    Game.theBoard.pieceSelected = -1;
-    //additionally, if there is no piece selected, then we should also
-    //have no possible moves showing. 
-    Game.theBoard.possibleMoves.bytes = 0;
-
     FrmPopupForm(PreferencesForm);
     handled = true;
     break;
@@ -1111,29 +1066,34 @@ static Boolean MainFormHandleEvent(EventPtr event)
     break;
     case penDownEvent:
     boardIndex = ScreenCoordToBoardIndex(&Game.theBoard, event->screenX, event->screenY);
-    //if the location clicked is somewhere on the board
     if (-1 != boardIndex) {
-      //If there is no piece selected, select the piece.
+        //If there is no piece selected, select the piece.
       if (-1 == Game.theBoard.pieceSelected) {
 	if (Game.theBoard.g.board[boardIndex].attributes != 0x00) {
+	  DrawSelection(&Game.theBoard, boardIndex);
+	  //DrawBox(&Game.theBoard, boardIndex, false);
 	  Game.theBoard.pieceSelected = boardIndex;
-	  DrawDots(&Game, boardIndex);
+	  //if (Game.theBoard.g.showPossible) {
+	  if (true) {
+	    DrawPossibleMoves(&Game, boardIndex);
+	  }
 	}
       }
       //If the same piece has been clicked again, deselect that piece
       else if (boardIndex == Game.theBoard.pieceSelected) {
+	DrawSelection(&Game.theBoard, boardIndex);
+	//DrawBox(&Game.theBoard, boardIndex, false);
 	Game.theBoard.pieceSelected = -1;
 	//This is a little excessive (an entire redraw), but it works now..
 	DrawSquares(&Game.theBoard);
       }
-
-      //a move has occured
       else {
+	DrawSelection(&Game.theBoard, Game.theBoard.pieceSelected);
+	//DrawBox(&Game.theBoard, Game.theBoard.pieceSelected, false);
 	if (move(&Game, Game.theBoard.pieceSelected, boardIndex)) {
 	  Game.theBoard.pieceSelected = -1;
-	  //are there any moves left?
 	  if (!(anyValidMoves(&Game))) {
-	  //This means the game is over;
+	    //This means the game is over;
 	    if (FrmAlert(NewGameAlert) == 0) {
 	      FreeBoard(&Game.theBoard);
 	      newGame();
@@ -1141,16 +1101,7 @@ static Boolean MainFormHandleEvent(EventPtr event)
 	    }
 	  }
 	}
-	//the move failed
-	else {
-	  //RemoveDots(&Game.theBoard, Game.theBoard.pieceSelected);
-	}
-	//This is a little excessive (an entire redraw), but it works now..
-	//DrawSquares(&Game.theBoard);
-
-	//move this to outside this block when it works
-	//that way it draws the dots as appropriate
-	
+	DrawSquares(&Game.theBoard);
       }
       handled = true;
     }
@@ -1216,13 +1167,26 @@ static void EventLoop(void) {
   UInt16     error;
   
   do {
-    EvtGetEvent(&event, evtWaitForever);
+    if (Game.theBoard.g.showPossible) {
+	EvtGetEvent(&event, 1000);
+    }
+    else {
+      EvtGetEvent(&event, evtWaitForever);
+    }
     if (! SysHandleEvent(&event))
       if (! MenuHandleEvent(0, &event, &error))
 	if (! ApplicationHandleEvent(&event))
 	  FrmDispatchEvent(&event);
-  }
-  while (event.eType != appStopEvent);
+    if (Game.theBoard.blinking) {
+      if (Game.theBoard.blinkOn) {
+	//blink;
+      }
+      else {
+	//turn off the blink.
+      }
+      Game.theBoard.blinkOn = !(Game.theBoard.blinkOn);
+    }
+  } while (event.eType != appStopEvent);
 }
 
 UInt32 PilotMain(UInt16 launchCode, MemPtr cmdPBP,
