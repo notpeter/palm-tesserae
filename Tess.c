@@ -845,6 +845,7 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
 	FreeBoard(&Game.theBoard);
 	newGame();
 
+	FrmUpdateForm(MainForm, frmRedrawUpdateCode);
 	FrmReturnToForm (0);
 	handled = true;
       }
@@ -876,8 +877,10 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
     listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, HeightList));
     StrCopy(label, LstGetSelectionText(listP, gs->height - 5));
     CtlSetLabel(ctl, label);
-    LstSetSelection(listP, gs->width - 5);
-    //LstMakeItemVisible(listP, gs->width - 5);
+    LstSetSelection(listP, gs->height - 5);
+    //Makes it so that when the user clicks on the list, the currently
+    //set preference is in the selection box.
+    LstMakeItemVisible(listP, gs->height - 5);
     
     ctl = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, WidthTrigger));
     label = CtlGetLabel(ctl);
@@ -885,7 +888,9 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
     StrCopy(label, LstGetSelectionText(listP, gs->width - 5));
     CtlSetLabel(ctl, label);
     LstSetSelection(listP, gs->width - 5);
-    //LstMakeItemVisible(listP, gs->width - 5);
+    //Makes it so that when the user clicks on the list, the currently
+    //set preference is in the selection box.
+    LstMakeItemVisible(listP, gs->width - 5);
 
     FrmDrawForm (frm);
     handled = true;
@@ -1006,14 +1011,22 @@ static Boolean MainFormHandleEvent(EventPtr event)
     }
     break;
   case frmUpdateEvent:
-    //This is needed so that the buttons and the menu get redrawn properly
-    FrmDrawForm(form);
-    //This actually draws the squares
-    DrawSquares(&Game.theBoard);
-    //You must return true, otherwise the caller erases the form
-    //(and everything performed above), and calls FrmDrawForm itself.
-    handled = true;
-    break;
+    {
+      RectangleType r;
+      r.topLeft.x = 0;
+      r.topLeft.y = 0;
+      r.extent.x = DeviceSettings.ScreenWidth;
+      r.extent.y = DeviceSettings.ScreenHeight;
+      WinEraseRectangle(&r, 0);
+      //This is needed so that the buttons and the menu get redrawn properly
+      FrmDrawForm(form);
+      //This actually draws the squares
+      DrawSquares(&Game.theBoard);
+      //You must return true, otherwise the caller erases the form
+      //(and everything performed above), and calls FrmDrawForm itself.
+      handled = true;
+      break;
+    }
   case menuEvent:
     handled = MainMenuHandleEvent(event->data.menu.itemID);
     break;
