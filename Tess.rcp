@@ -6,12 +6,12 @@ VERSION             ID 1   "0.1"
 
 form id MainForm at (0 0 160 160)
 
-menuid MainMenuBar 
+menuid MainMenuBar  
 begin
   title "Tesserae"
-  button "RD" id MainFormRDButton at (57 2 19 10)
-  button "UD" id MainFormUDButton at (82 2 19 10)
-  button "New Game" id MainFormNewButton at (107 2 50 10)
+  button "RD" id MainFormRDButton at (55 2 17 10)
+  button "Undo" id MainFormUDButton at (76 2 25 10)
+  button "New Game" id MainFormNewButton at (109 2 50 10)
 end
 
 MENU ID MainMenuBar
@@ -19,6 +19,7 @@ BEGIN
     PULLDOWN "Game"
     BEGIN
         MENUITEM "New"   		MainGameNew		"N"
+        MENUITEM "Undo"   		MainGameUndo		"U"
 	MENUITEM "Instructions"		MainGameInstructions	"I"
     	MENUITEM "Preferences"		MainGamePreferences     "R"
     END
@@ -70,16 +71,33 @@ END
 
 
 
-FORM ID FrmPreferences  AT ( 2 2 156 156 )
-MODAL DEFAULTBTNID PreferencesOKButton
+FORM ID PreferencesForm  AT ( 2 2 156 156 )
+MODAL DEFAULTBTNID PreferencesCancelButton  FRAME     
 BEGIN
         TITLE "Preferences"
-	LABEL "Height:" AUTOID AT (5 15)
-	LABEL "Width:" AUTOID AT (5 36)
-	LABEL "Skill:" AUTOID AT (5 57)
-	CHECKBOX "Show Possible Moves" ID ShowPossibleMoves    AT (5 72 101 10)
-	CHECKBOX "Square Tiles" ID SquareTiles  AT (PREVLEFT 87 76 10)
+	LABEL "Skill:" AUTOID AT (5 75)
+	CHECKBOX "Show Possible Moves" ID ShowPossibleMoves    AT (5 90 101 10)
+	CHECKBOX "Square Tiles" ID SquareTiles  AT (PREVLEFT 105 76 10)
 
 	BUTTON "OK" ID PreferencesOKButton  AT (5 140 35 12)
 	BUTTON "Cancel" ID PreferencesCancelButton  AT (45 140 35 12)
+		
+	
+	LABEL "Height:" AUTOID AT (5 17)	
+	POPUPTRIGGER "15" ID HeightTrigger  AT (PREVLEFT+30 PREVTOP 32 15)  LEFTANCHOR
+	LIST  "5" "6" "7" "8" "9" "10" "11" "12" "13" "14" "15"  ID HeightList  AT (PREVLEFT PREVTOP PREVWIDTH-10 57) VISIBLEITEMS 5 NONUSABLE 
+	POPUPLIST ID HeightTrigger  HeightList
+	
+	LABEL "Width:" AUTOID AT (5 45)
+	POPUPTRIGGER "15" ID WidthTrigger  AT (PREVLEFT+30 PREVTOP 32 15)  LEFTANCHOR
+	LIST  "5" "6" "7" "8" "9" "10" "11" "12" "13" "14" "15"  ID WidthList  AT (PREVLEFT PREVTOP PREVWIDTH-10 57) VISIBLEITEMS 5 NONUSABLE
+	POPUPLIST ID WidthTrigger  WidthList
+END
+
+ALERT ID NewGameAlert
+CONFIRMATION  DEFAULTBUTTON 0
+BEGIN
+     TITLE "End Game"
+     MESSAGE "This will discard the current game and begin a new one. Do you wish to continue?"
+     BUTTONS "No" "Yes"
 END

@@ -119,7 +119,7 @@ static const UInt32 colorsHex[8] = {WHITE,YELLOW,BLUE,GREEN,RED,
 //colors for each of the possible tiles.
 static IndexedColorType colors[8];
 static aGame Game;
-//static Pref Game;
+static Boolean prefsTouched = 0;
 
 
 //static DmOpenRef TessDB;
@@ -148,7 +148,7 @@ static void MovePushMove(aGame *g, Move m) {
 }
 
 static void MovePopMove(aGame *g, Move *m) {
-  MemHandle h = MemPtrRecoverHandle(g->moves);
+  //MemHandle h = MemPtrRecoverHandle(g->moves);
   if (g->numMoves == 0) {
     //Empty Stack!
     return;
@@ -188,10 +188,11 @@ static Board MakeBoard(UInt8 width, UInt8 height, Boolean squarePieces) {
   b.g.height = height;
   b.g.squarePieces = squarePieces;
   //The -1 at the end is to take the lines between cells into account.
-  b.squareWidth = (DeviceSettings.ScreenWidth - 
-		   (DeviceSettings.ScreenBorder * 3)) / (b.g.width) -1;
-  b.squareHeight = (DeviceSettings.ScreenHeight - DeviceSettings.ScreenHeader -
-		    (DeviceSettings.ScreenBorder * 3)) / (b.g.height) -1;
+  b.squareWidth = (((DeviceSettings.ScreenWidth - 2) -
+		   (DeviceSettings.ScreenBorder * 2)) / (b.g.width));
+  b.squareHeight = (((DeviceSettings.ScreenHeight - 2) -
+		    (DeviceSettings.ScreenHeader +
+		    (DeviceSettings.ScreenBorder * 2))) / (b.g.height));
   if (b.squareWidth % 2 != 1)
     b.squareWidth--;
   if (b.squareHeight % 2 != 1)
@@ -205,11 +206,11 @@ static Board MakeBoard(UInt8 width, UInt8 height, Boolean squarePieces) {
   }
   b.rect.topLeft.x = ((DeviceSettings.ScreenWidth -
 		    (DeviceSettings.ScreenBorder * 2) -
-		    ((b.squareWidth) * b.g.width)) /2);
+		    ((b.squareWidth) * b.g.width)) /2) + 1;
   b.rect.topLeft.y = (((DeviceSettings.ScreenHeight -
 		     (DeviceSettings.ScreenBorder * 2) -
 		     DeviceSettings.ScreenHeader -
-		     (b.squareHeight * b.g.height)) /2) +
+		     ((b.squareHeight) * b.g.height)) /2) +
 		   DeviceSettings.ScreenHeader);
   b.rect.extent.x = ((DeviceSettings.ScreenWidth - 
 		      b.rect.topLeft.x));
@@ -293,7 +294,7 @@ static aGame GetSavedGame() {
 			      ag.theBoard.g.board, &boardSize,
 			      unsaved) != noPreferenceFound) {
       
-      movesSize = (ag.numMoves * sizeof(Move) +1);
+      movesSize = ((ag.numMoves+8) * sizeof(Move));
       ag.moves = MemHandleLock(MemHandleNew(movesSize));
       MemSet(ag.moves, movesSize, 0x00);
       if (PrefGetAppPreferences(TessCreatorID, Pref_MovesArray,
@@ -302,15 +303,17 @@ static aGame GetSavedGame() {
 	return ag;
       }
       MemHandleUnlock(MemPtrRecoverHandle(ag.moves));
+      MemHandleFree(MemPtrRecoverHandle(ag.moves));
     }
     MemHandleUnlock(MemPtrRecoverHandle(ag.theBoard.g.board));
+    MemHandleFree(MemPtrRecoverHandle(ag.theBoard.g.board));
   }
   
   MemSet(&ag, agSize, 0x00);
 
   // No preferences exist yet, so set the defaults
-  ag.theBoard = MakeBoard(8, 8, true);
-  ag.theBoard.g.skillLevel = difficultyEasy;
+  ag.theBoard = MakeBoard(7, 6, true);
+  ag.theBoard.g.skillLevel = defaultDifficulty;
   ag.theBoard.g.showPossible = true;
   ag.theBoard.pieceSelected = -1;
   ag.theBoard.blinkRate = SysTicksPerSecond() / 2;
@@ -318,6 +321,7 @@ static aGame GetSavedGame() {
   ag.theBoard.blinkOn = false;
   
   FillBoardRandom(&ag.theBoard.g);
+  movesSize = ((ag.numMoves+8) * sizeof(Move));
   ag.moves = MemHandleLock(MemHandleNew(movesSize));
   MemSet(ag.moves, movesSize, 0x00);
 
@@ -406,7 +410,6 @@ static void FreeBoard(Board *b) {
       MemHandleUnlock(h2);
       MemHandleFree(h2);
   }
-  //MemHandleFree(MemPtrRecoverHandle(b->g.board));
 }
 
 
@@ -490,13 +493,19 @@ static void DrawALoc(Board *b, UInt16 loc){
   DrawOneSquare(b, r.topLeft, s);
 }
 static void DrawBox(Board *b, UInt16 index, Boolean Round) {
-  UInt8 j = 5, k = 0;
+  UInt8 j, k = 0;
   //FrameBitsType frameBits;
   RectangleType r;
   PointType p;
   
-  if (Round)
-    k = 3;
+  if (b->squareWidth >= b->squareHeight) {
+    j = ((b->squareHeight / 4) + 1);
+  }
+  else {
+    j = ((b->squareWidth / 4) + 1);
+  }
+
+
   p = GetXY(b, index);
   r.topLeft.x = b->rect.topLeft.x + ((b->squareWidth+1) * p.x);
   r.topLeft.y = b->rect.topLeft.y + ((b->squareHeight+1) * p.y);
@@ -512,6 +521,12 @@ static void DrawBox(Board *b, UInt16 index, Boolean Round) {
   r.extent.y  -= (j * 2);
   //frameBits.bits.cornerDiam = (r.extent.x /2) +1;
   //frameBits.bits.width = 1;
+
+  if (Round)
+    k = (r.extent.x / 2);
+
+  //k here can never fully round out the corner cause of how it is defined.
+  //Redo this to fix it.
   WinDrawRectangle(&r, k);
   //WinDrawRectangleFrame(frameBits, &r);
   //b->g.board[pieceSelected]
@@ -569,7 +584,6 @@ static void DrawSquares(Board *b) {
     }
   }
 }
-
 //Taken from Palm Programming Bible
 /*
 static void DrawBitmap (UInt16 bitmapID, Int16 x, Int16 y){
@@ -737,9 +751,9 @@ static void setupDeviceSettings() {
     DeviceSettings.Color = false;
   }
 
-  DeviceSettings.ScreenHeight = 160;
+  //DeviceSettings.ScreenHeight = 160;
   DeviceSettings.ScreenHeader = 15;
-  DeviceSettings.ScreenBorder = 3;
+  DeviceSettings.ScreenBorder = 5;
   DeviceSettings.MinimumPixelSize = 15;
   DeviceSettings.MaxWidth = ((DeviceSettings.ScreenWidth -
 			      DeviceSettings.ScreenBorder) / 
@@ -799,30 +813,99 @@ static Err StartApplication(UInt16 launchFlags) {
 static void StopApplication(void) {
   StoreSavedGame(Game);
   //FreeBoard(&Game.theBoard);
-  //DmCloseDatabase(TessDB);
   if (DeviceSettings.RomVersion >= RomOS35)
     WinPopDrawState();
   FrmCloseAllForms();
 }
 
+static void Ctl_SetVal(FormPtr frm, UInt16 Id, Int16 value) {
+  ControlType *ctl = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, Id));
+  CtlSetValue(ctl, value);
+}
+static Int16 Ctl_GetVal(FormPtr frm, UInt16 Id) {
+  ControlType *ctl = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, Id));
+  return (CtlGetValue(ctl));
+}
+
+static Boolean PreferencesEventHandler (EventPtr eventP) {
+  Boolean handled = false;
+  FormPtr frm = FrmGetActiveForm ();
+
+ if (eventP->eType == ctlSelectEvent) {
+    if (eventP->data.ctlSelect.controlID == PreferencesOKButton) {
+      //The Yes button returns 1 from this frmalert. (The No button returns 0)
+      if (!prefsTouched) {
+	FrmReturnToForm (0);
+	handled = true;	
+      }
+      else if (FrmAlert(NewGameAlert)) {
+	ListType *listP;
+	GameSettings *gs = &Game.theBoard.g;
+	gs->squarePieces = Ctl_GetVal(frm, SquareTiles);
+	gs->showPossible = Ctl_GetVal(frm, ShowPossibleMoves);
+
+	listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, HeightList));
+	gs->height = (LstGetSelection(listP) + 5);
+	listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, WidthList));
+	gs->width = (LstGetSelection(listP) + 5);
+
+	FreeBoard(&Game.theBoard);
+	newGame();
+
+	FrmReturnToForm (0);
+	handled = true;
+      }
+      else
+	handled = false;
+    }
+    else if (eventP->data.ctlSelect.controlID == PreferencesCancelButton) {
+      FrmReturnToForm (0);
+      handled = true;
+    }
+    else {
+      prefsTouched = true;
+    }
+  }
+  else if (eventP->eType == frmOpenEvent) {
+    GameSettings *gs = &Game.theBoard.g;
+    ControlType *ctl;
+    Char *label;
+    ListType *listP;
+
+    prefsTouched = false;
+
+    Ctl_SetVal(frm, SquareTiles, gs->squarePieces);
+    Ctl_SetVal(frm, ShowPossibleMoves, gs->showPossible);
+
+    //FIX THIS -- IT IS BROKEN (2002-Aug-15)
+
+    ctl = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, HeightTrigger));
+    label = CtlGetLabel(ctl);
+    listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, HeightList));
+    //StrCopy(label, LstGetSelectionText(listP, gs->height - 5));
+    LstSetSelection(listP, gs->width - 5);
+    //CtlSetLabel(ctl, label);
+
+    ctl = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, WidthTrigger));
+    label = CtlGetLabel(ctl);
+    listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, WidthList));
+    //StrCopy(label, LstGetSelectionText(listP, gs->width - 5));
+    LstSetSelection(listP, gs->width - 5);
+    //CtlSetLabel(ctl, label);
+
+    FrmDrawForm (frm);
+    handled = true;
+  }
+  return (handled);
+}
+
 static Boolean MainMenuHandleEvent(UInt16 menuID) {
   Boolean    handled = false;
   //FormType   *form = FrmGetActiveForm();
-  FormType   *frmP;
-  UInt16 whichButton;
   
   switch (menuID) {
   case MainGamePreferences:
-    frmP = FrmInitForm(FrmPreferences);
-    /* initialize your controls on the form here */
-    // open the dialog, and wait until a button is pressed to close it.
-    whichButton = FrmDoDialog(frmP);
-    if (whichButton == PreferencesOKButton) {
-      /* get data from controls on the form to save/apply changes */
-    }
-    FrmDeleteForm(frmP);
-    
-    //FrmPopupForm(FrmPreferences);
+    FrmPopupForm(PreferencesForm);
     handled = true;
     break;
   case MainOptionsAbout:
@@ -834,8 +917,13 @@ static Boolean MainMenuHandleEvent(UInt16 menuID) {
     handled = true;
     break;  
   case MainGameNew:
-    FreeBoard(&Game.theBoard);
-    newGame();
+    if (FrmAlert(NewGameAlert)) {
+      FreeBoard(&Game.theBoard);
+      newGame();
+    }
+    //else {
+    //  DrawSquares(&Game.theBoard);
+    //}
     handled = true;
     break;  
   default:
@@ -864,8 +952,13 @@ static Boolean MainFormHandleEvent(EventPtr event)
   case ctlSelectEvent:
     switch (event->data.ctlSelect.controlID) {
     case MainFormNewButton:
-      FreeBoard(&Game.theBoard);
-      newGame();
+      if (FrmAlert(NewGameAlert)) {
+	FreeBoard(&Game.theBoard);
+	newGame();
+      }
+      //else {
+      //DrawSquares(&Game.theBoard);
+      //}
       handled = true;
       break;
     //Redraw
@@ -913,13 +1006,21 @@ static Boolean MainFormHandleEvent(EventPtr event)
     else {
     }
     break;
+  case frmUpdateEvent:
+    //This is needed so that the buttons and the menu get redrawn properly
+    FrmDrawForm(form);
+    //This actually draws the squares
+    DrawSquares(&Game.theBoard);
+    //You must return true, otherwise the caller erases the form
+    //(and everything performed above), and calls FrmDrawForm itself.
+    handled = true;
+    break;
   case menuEvent:
     handled = MainMenuHandleEvent(event->data.menu.itemID);
     break;
   default:
     break;
   }
-  
   return handled;
 }
 
@@ -937,7 +1038,10 @@ static Boolean ApplicationHandleEvent(EventPtr event)
     switch (formID) {
     case MainForm:
       FrmSetEventHandler(form, MainFormHandleEvent);
-      break;  
+      break;
+    case PreferencesForm:
+      FrmSetEventHandler(form, PreferencesEventHandler);
+      break;
     default:
       break;
     }
