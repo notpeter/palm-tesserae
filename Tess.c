@@ -70,7 +70,6 @@ typedef struct GameSettings {
   //functions to get the handle when it is needed for resizing/freeing memory 
   UInt8 skillLevel;
   Square *board;
-  Boolean squarePieces;
   //Show possible moves
   Boolean showPossible;
 } GameSettings;
@@ -181,12 +180,11 @@ static UInt16 RandomNum(UInt16 n) {
     return SysRandom(0) / (1 + sysRandomMax / n);
 }
 
-static Board MakeBoard(UInt8 width, UInt8 height, Boolean squarePieces) {
+static Board MakeBoard(UInt8 width, UInt8 height) {
   Board b;
   UInt16 i;
   b.g.width = width;
   b.g.height = height;
-  b.g.squarePieces = squarePieces;
   //The -1 at the end is to take the lines between cells into account.
   b.squareWidth = (((DeviceSettings.ScreenWidth - 2) -
 		   (DeviceSettings.ScreenBorder * 2)) / (b.g.width));
@@ -197,13 +195,10 @@ static Board MakeBoard(UInt8 width, UInt8 height, Boolean squarePieces) {
     b.squareWidth--;
   if (b.squareHeight % 2 != 1)
     b.squareHeight--;
-  //Make the pieces square if need be.
-  if (b.g.squarePieces) {
-    if (b.squareHeight >= b.squareWidth)
-      b.squareHeight = b.squareWidth;
-    else
-      b.squareWidth = b.squareHeight;
-  }
+  if (b.squareHeight >= b.squareWidth)
+    b.squareHeight = b.squareWidth;
+  else
+    b.squareWidth = b.squareHeight;
   b.rect.topLeft.x = ((DeviceSettings.ScreenWidth -
 		    (DeviceSettings.ScreenBorder * 2) -
 		    ((b.squareWidth) * b.g.width)) /2) + 1;
@@ -312,7 +307,7 @@ static aGame GetSavedGame() {
   MemSet(&ag, agSize, 0x00);
 
   // No preferences exist yet, so set the defaults
-  ag.theBoard = MakeBoard(7, 6, true);
+  ag.theBoard = MakeBoard(7, 6);
   ag.theBoard.g.skillLevel = defaultDifficulty;
   ag.theBoard.g.showPossible = true;
   ag.theBoard.pieceSelected = -1;
@@ -701,15 +696,14 @@ static Boolean move(aGame *g, UInt16 src, UInt16 dest) {
 }
 static void newGame() {
   //Game = GetSavedGame();
-  Game.theBoard = MakeBoard(Game.theBoard.g.width, Game.theBoard.g.height,
-		 Game.theBoard.g.squarePieces);
+  Game.theBoard = MakeBoard(Game.theBoard.g.width, Game.theBoard.g.height);
   Game.theBoard.pieceSelected = -1;
   Game.theBoard.blinkRate = SysTicksPerSecond() / 2;
   Game.theBoard.blinking = false;
   Game.theBoard.blinkOn = false;
   Game.theBoard.g.skillLevel = difficultyEasy;
   FillBoardRandom(&Game.theBoard.g);
-  DrawSquares(&Game.theBoard);
+  //DrawSquares(&Game.theBoard);
   Game.numMoves = 0;
 }
 
@@ -841,7 +835,6 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
       else if (FrmAlert(NewGameAlert)) {
 	ListType *listP;
 	GameSettings *gs = &Game.theBoard.g;
-	gs->squarePieces = Ctl_GetVal(frm, SquareTiles);
 	gs->showPossible = Ctl_GetVal(frm, ShowPossibleMoves);
 
 	listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, HeightList));
@@ -874,7 +867,6 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
 
     prefsTouched = false;
 
-    Ctl_SetVal(frm, SquareTiles, gs->squarePieces);
     Ctl_SetVal(frm, ShowPossibleMoves, gs->showPossible);
 
     //FIX THIS -- IT IS BROKEN (2002-Aug-15)
@@ -882,16 +874,18 @@ static Boolean PreferencesEventHandler (EventPtr eventP) {
     ctl = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, HeightTrigger));
     label = CtlGetLabel(ctl);
     listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, HeightList));
-    //StrCopy(label, LstGetSelectionText(listP, gs->height - 5));
+    StrCopy(label, LstGetSelectionText(listP, gs->height - 5));
+    CtlSetLabel(ctl, label);
     LstSetSelection(listP, gs->width - 5);
-    //CtlSetLabel(ctl, label);
-
+    //LstMakeItemVisible(listP, gs->width - 5);
+    
     ctl = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, WidthTrigger));
     label = CtlGetLabel(ctl);
     listP = FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, WidthList));
-    //StrCopy(label, LstGetSelectionText(listP, gs->width - 5));
+    StrCopy(label, LstGetSelectionText(listP, gs->width - 5));
+    CtlSetLabel(ctl, label);
     LstSetSelection(listP, gs->width - 5);
-    //CtlSetLabel(ctl, label);
+    //LstMakeItemVisible(listP, gs->width - 5);
 
     FrmDrawForm (frm);
     handled = true;
@@ -920,6 +914,9 @@ static Boolean MainMenuHandleEvent(UInt16 menuID) {
     if (FrmAlert(NewGameAlert)) {
       FreeBoard(&Game.theBoard);
       newGame();
+      //This isn't needed cause it calls frm update event when the dialog
+      //goes away.
+      //DrawSquares(&Game.theBoard);
     }
     //else {
     //  DrawSquares(&Game.theBoard);
@@ -955,6 +952,8 @@ static Boolean MainFormHandleEvent(EventPtr event)
       if (FrmAlert(NewGameAlert)) {
 	FreeBoard(&Game.theBoard);
 	newGame();
+	//This isn't needed cause it calls frmupdate event.
+	DrawSquares(&Game.theBoard);
       }
       //else {
       //DrawSquares(&Game.theBoard);
