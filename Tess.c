@@ -7,8 +7,13 @@
 #include <PalmOS.h>
 #include "TessRsc.h"
 
-#define ROMVersionMinimum				0x02000000
+#define ROMVersionMinimum				0x03000000
 #define RomOS35						0x03500000
+#define TessDBName"TesseraeDB"
+#define TessDBType	'DATA'
+#define TessCreatorID	'TeSS'
+#define TessPrefID	0
+
 #define LEVEL_BEGINNER 1
 #define LEVEL_INTERMEDIATE 2
 #define LEVEL_ADVANCED 3
@@ -52,12 +57,25 @@ typedef struct Board {
   Boolean blinkOn;
 } Board;
 
+typedef struct Pref {
+  Board theBoard;
+  UInt8 width;
+  UInt8 height;
+  UInt8 skillLevel;
+  Boolean squarePieces;
+  Boolean showPossible;
+} Pref;
+
 //Begin GLobal Variables
 static Board bb;
-//Think binary counting here. the fourth 
+//Think binary counting here. the third color is 1 + 2;
 static const UInt32 colorsHex[8] = {WHITE,YELLOW,BLUE,GREEN,RED,ORANGE,PURPLE,GRAY};
 //colors for each of the possible tiles.
 static IndexedColorType colors[8];
+static Pref Game;
+
+
+//static DmOpenRef TessDB;
 static struct {
   UInt32 RomVersion;
   UInt32 ScreenWidth;
@@ -71,8 +89,10 @@ static struct {
 } DeviceSettings;
 //End Global Variables
 
+
 static UInt16 RandomNum(UInt16 n) {
   //this is ghetto, but fixes divide by zero issues should they arise.
+
   if (n == 0)
     return 0;
   else
@@ -253,12 +273,14 @@ static void DrawOneSquare(Board *b, PointType p, Square s) {
   r.topLeft.y = p.y +2;
   r.extent.x = b->squareWidth -5;
   r.extent.y = b->squareHeight -5;
-  color.topLeft = p;
-  color.extent.x = b->squareWidth;
-  color.extent.y = b->squareHeight; 
-  oldBGIndex = WinSetBackColor(colors[(GETATTRIBUTES(s))]);
-  WinEraseRectangle(&color, 0);
-  WinSetBackColor(oldBGIndex);
+  if (DeviceSettings.Color) {
+    color.topLeft = p;
+    color.extent.x = b->squareWidth;
+    color.extent.y = b->squareHeight; 
+    oldBGIndex = WinSetBackColor(colors[(GETATTRIBUTES(s))]);
+    WinEraseRectangle(&color, 0);
+    WinSetBackColor(oldBGIndex);
+  }
   if ((s >> 0) %2) {    
     DrawPlusInRect(r);
   }
@@ -498,17 +520,51 @@ static Err RomVersionCompatible (UInt32 requiredVersion, UInt16 launchFlags) {
   return (0);
 }
 
+static void SetPrefs(Pref * prefs) {
+  UInt16 prefsSize = sizeof(Pref);
+  
+  if (PrefGetAppPreferences(TessCreatorID, TessPrefID, prefs,
+			    &prefsSize, true) != noPreferenceFound) {
+  }
+  else {
+    // No preferences exist yet, so set the defaults
+    prefs->width = 8;
+    prefs->width = 8;
+    prefs->skillLevel = LEVEL_BEGINNER;
+    prefs->squarePieces = true;
+    prefs->showPossible = true;
+  }}
+
+
 static Err StartApplication(UInt16 launchFlags) {
   Err  err;
   err = RomVersionCompatible (ROMVersionMinimum, launchFlags);
-  if (err) return (err);
+  if (err)
+    return (err);
+  
   setupDeviceSettings();
+  
+  SetPrefs(&Game);
+  /*TessDB = DmOpenDatabaseByTypeCreator(TessDBType, TessCreatorID, dmModeReadWrite);
+  if (! TessDB) {
+    err = DmCreateDatabase(0, TessDBName, TessCreatorID, TessDBType, false);
+    if (err)
+      return err;
+    TessDB = DmOpenDatabaseByTypeCreator(TessDBType, TessCreatorID, dmModeReadOnly);
+    if (! TessDB)
+      return DmGetLastErr();
+      }*/
+
+  
+
   FrmGotoForm(MainForm);
   return 0;
 }
 
 
 static void StopApplication(void) {
+  
+  //DmCloseDatabase(TessDB);
   FreeBoard(&bb);
   if (DeviceSettings.RomVersion >= RomOS35)
     WinPopDrawState();
@@ -517,9 +573,23 @@ static void StopApplication(void) {
 
 static Boolean MainMenuHandleEvent(UInt16 menuID) {
     Boolean    handled = false;
-    //FormType   *form = FrmGetActiveForm();
-    
+    FormType   *form = FrmGetActiveForm(), *frmP;
+    UInt16 whichButton;
+
     switch (menuID) {
+    case MainGamePreferences:
+      frmP = FrmInitForm(FrmPreferences);
+      /* initialize your controls on the form here */
+      // open the dialog, and wait until a button is pressed to close it.
+      whichButton = FrmDoDialog(frmP);
+      if (whichButton == PreferencesOKButton) {
+	/* get data from controls on the form to save/apply changes */
+      }
+      FrmDeleteForm(frmP);
+      
+      //FrmPopupForm(FrmPreferences);
+      handled = true;
+      break;
     case MainOptionsAbout:
       FrmAlert(AboutAlert);
       handled = true;
@@ -557,6 +627,10 @@ static Boolean MainFormHandleEvent(EventPtr event)
     case MainFormNewButton:
       FreeBoard(&bb);
       newGame();
+      handled = true;
+      break;
+    case MainFormRDButton:
+      DrawSquares(&bb);
       handled = true;
       break;
     default:
@@ -647,6 +721,9 @@ UInt32 PilotMain(UInt16 launchCode, MemPtr cmdPBP,
       EventLoop();
       StopApplication();
     }
+    break;
+  case sysAppLaunchCmdSaveData:
+    FrmSaveAllForms ();
     break;
   default:
     break;

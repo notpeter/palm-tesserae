@@ -5,11 +5,13 @@ APPLICATION         ID 1   "Tess"
 VERSION             ID 1   "0.1"
 
 form id MainForm at (0 0 160 160)
+
 menuid MainMenuBar 
 begin
   title "Tesserae"
+  button "RD" id MainFormRDButton at (67 2 20 10)
   button "New Game" id MainFormNewButton at (97 2 50 10)
-  end
+end
 
 MENU ID MainMenuBar
 BEGIN
@@ -17,6 +19,7 @@ BEGIN
     BEGIN
         MENUITEM "New"   		MainGameNew		"N"
 	MENUITEM "Instructions"		MainGameInstructions	"I"
+    	MENUITEM "Preferences"		MainGamePreferences     "R"
     END
     PULLDOWN "Options"
     BEGIN
@@ -62,4 +65,20 @@ BEGIN
      TITLE "Here's the info"
      MESSAGE "^1, ^2, ^3"
      BUTTONS "OK" 
+END
+
+
+
+FORM ID FrmPreferences  AT ( 2 2 156 156 )
+MODAL DEFAULTBTNID PreferencesOKButton
+BEGIN
+        TITLE "Preferences"
+	LABEL "Height:" AUTOID AT (5 15)
+	LABEL "Width:" AUTOID AT (5 36)
+	LABEL "Skill:" AUTOID AT (5 57)
+	CHECKBOX "Show Possible Moves" ID ShowPossibleMoves    AT (5 72 101 10)
+	CHECKBOX "Square Tiles" ID SquareTiles  AT (PREVLEFT 87 76 10)
+
+	BUTTON "OK" ID PreferencesOKButton  AT (5 140 35 12)
+	BUTTON "Cancel" ID PreferencesCancelButton  AT (45 140 35 12)
 END
