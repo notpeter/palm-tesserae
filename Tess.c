@@ -384,6 +384,7 @@ static Int16 GetIndex(Board *b, UInt8 x, UInt8 y) {
     return -1;
 }
 
+
 static PointType GetXY(Board *b, UInt16 Index) {
   PointType p;
   if (Index < b->size && Index >= 0) {
@@ -656,59 +657,113 @@ static void MoveUndo(aGame *g, Int16 count) {
   DrawALoc(b, m.to);
 }
 
-static UInt8 validMoves(aGame *g, UInt16 index) {
-  Board *b = &(g->theBoard);
-  typedef union daMoves {
-    UInt8 byte;
-    struct d {
-      unsigned nn: 1;
-      unsigned ne: 1;
-      unsigned ee: 1;
-      unsigned se: 1;
-      unsigned ss: 1;
-      unsigned sw: 1;
-      unsigned ww: 1;
-      unsigned nw: 1;
+typedef union daMoves {
+  UInt8 byte;
+  struct d {
+    unsigned nn: 1;
+    unsigned ne: 1;
+    unsigned ee: 1;
+    unsigned se: 1;
+    unsigned ss: 1;
+    unsigned sw: 1;
+    unsigned ww: 1;
+    unsigned nw: 1;
     } d;
-  } daMoves;
-  daMoves c; //what moves -CAN- be done (don't involve leaving the board)
-  daMoves l; //what moves are legal (subset of above;
+} daMoves;
+
+//assumes coordinates are already correct
+static Boolean isValidMove(Board *b, UInt16 src, UInt16 mid, UInt16 dest) {
+  if ((b->g.board[src].attributes &&
+       b->g.board[mid].attributes) &&
+      //And either the src and the middle are primaries.
+      ((((ISPOWEROF2(b->g.board[src].attributes)) &&
+	 (ISPOWEROF2(b->g.board[mid].attributes))) ||
+	//Or the mid contains everything that is in the src
+	((b->g.board[src].attributes & b->g.board[mid].attributes) == b->g.board[src].attributes)) &&
+       //And either the src and dest are the same
+	   ((b->g.board[src].attributes == b->g.board[dest].attributes) ||
+	    //or the destination has nothing that the source does
+	    ((b->g.board[src].attributes & b->g.board[dest].attributes) == 0)))) {
+    return true;
+  }
+  else
+    return false;
+}
+
+static daMoves validMoves(aGame *g, UInt16 index) {
+  Board *b = &(g->theBoard);
+  daMoves l; //what moves are legal;
   
-  c.byte = 0xFF; //Starts with all moves are possible.
+  UInt16 src = index, mid, dest;
+
+  l.byte = 0xFF; //Starts with all moves are possible.
 
   //If it is not on the board, or if the space is empty. no valid moves.
   if (!(b->g.board[index].onBoard &&
-	b->g.board[index].attributes))
-    return 0;
-
-  //in the first two rows -- no n, ne, nw
-  if ((index / b->g.width) < 1)
-    c.d.nn = c.d.ne = c.d.nw = 0;
-  //in first two columns -- no nw, w, sw
-  if ((index % b->g.height) > 1)
-    c.d.nw = c.d.ww = c.d.sw = 0;
-  //in the last two rows -- no sw, s, se
-  if ((index / b->g.width) < b->g.height - 2)
-    c.d.sw = c.d.ss = c.d.se = 0;
-  //in the last two columns -- no se, e, ne
-  if ((index % b->g.height) < b->g.width - 2)
-    c.d.se = c.d.ee = c.d.ne = 0;
-
-  l = c;
-
-  /*  
-  {
-  PointType srcPt, midPt, destPt;
-  srcPt = GetXY(i, src);
-  destPt = GetXY(b, dest);
-  if (checkSquares(srcPt, destPt)) {
+	b->g.board[index].attributes)) {
+    daMoves g;
+    g.byte = 0;
+    return g;
   }
-  }*/
+  //in the first two rows -- no n, ne, nw
+  if ((index / b->g.width) < 2)
+    l.d.nn = l.d.ne = l.d.nw = 0;
+  //in first two columns -- no nw, w, sw
+  if ((index % b->g.height) < 2)
+    l.d.nw = l.d.ww = l.d.sw = 0;
+  //in the last two rows -- no sw, s, se
+  if ((index / b->g.width) > b->g.height - 3)
+    l.d.sw = l.d.ss = l.d.se = 0;
+  //in the last two columns -- no se, e, ne
+  if ((index % b->g.height) > b->g.width - 3)
+    l.d.se = l.d.ee = l.d.ne = 0;
+
+  if (l.d.nn) {
+    mid = src - b->g.width;
+    dest = (src - (b->g.width * 2));
+    l.d.nn = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.ne) {
+    mid = (src - b->g.width) + 1;
+    dest = (src - (b->g.width * 2)) + 2;
+    l.d.ne = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.ee) {
+    mid = src + 1;
+    dest = src + 2;
+    l.d.ee = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.se) {
+    mid = (src + b->g.width) + 1;
+    dest = (src + (b->g.width * 2)) + 2;
+    l.d.se = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.ss) {
+    mid = src + b->g.width;
+    dest = (src + (b->g.width * 2));
+    l.d.ss = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.sw) {
+    mid = (src + b->g.width) - 1;
+    dest = (src + (b->g.width * 2)) - 2;
+    l.d.sw = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.ww) {
+    mid = src - 1;
+    dest = src - 2;
+    l.d.ww = isValidMove(b, src, mid, dest);
+  }
+  if (l.d.nw) {
+    mid = (src - b->g.width) - 1;
+    dest = (src - (b->g.width * 2)) - 2;
+    l.d.nw = isValidMove(b, src, mid, dest);
+  }
+  return l;
 }
 static Boolean anyValidMoves(aGame *g) {
   UInt16 i;
   for (i=0; i < g->theBoard.size; i++)
-    if (validMoves(g, i))
+    if ((validMoves(g, i)).byte)
       return 1;
   return 0;
 }
@@ -1051,14 +1106,7 @@ static Boolean MainMenuHandleEvent(UInt16 menuID) {
       FreeBoard(&Game.theBoard);
       newGame();
       updateMoveCounterDisplay(Game.numMoves);
-
-      //This isn't needed cause it calls frm update event when the dialog
-      //goes away.
-      //DrawSquares(&Game.theBoard);
     }
-    //else {
-    //  DrawSquares(&Game.theBoard);
-    //}
     handled = true;
     break;  
   default:
@@ -1138,6 +1186,14 @@ static Boolean MainFormHandleEvent(EventPtr event)
 	//DrawBox(&Game.theBoard, Game.theBoard.pieceSelected, false);
 	if (move(&Game, Game.theBoard.pieceSelected, boardIndex)) {
 	  Game.theBoard.pieceSelected = -1;
+	  if (!(anyValidMoves(&Game))) {
+	    //This means the game is over;
+	    if (FrmAlert(NewGameAlert) == 0) {
+	      FreeBoard(&Game.theBoard);
+	      newGame();
+	      updateMoveCounterDisplay(Game.numMoves);
+	    }
+	  }
 	}
       }
       handled = true;

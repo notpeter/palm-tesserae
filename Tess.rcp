@@ -125,7 +125,7 @@ ALERT ID NewGameAlert
 CONFIRMATION DEFAULTBUTTON 0
 BEGIN
      TITLE "End Game"
-     MESSAGE "This will end this game and start a new one."
+     MESSAGE "This will end the current game and start a new one."
      BUTTONS "OK" "Cancel"
 END
 
