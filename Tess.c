@@ -12,8 +12,13 @@
 #define TessDBName	"TesseraeDB"
 #define TessDBType	'DATA'
 #define TessCreatorID	'TeSS'
-#define TessPrefID	0
-#define TessPrefVersionNumber 1
+#define TessPrefVers    0x0001
+
+typedef enum TessPrefID {
+  Pref_aGameStruct = 0x7000,
+  Pref_SquaresArray = 0x7001,
+  Pref_MovesArray = 0x7002
+} TessPreVersionNumber;
 
 typedef enum DifficultyType {
   difficultyEasy = 1,
@@ -94,14 +99,13 @@ typedef struct aGame {
   //You only actually need a pointer cause you can use the recover handle
   //functions to get the handle when it is needed for resizing/freeing memory
   Board theBoard;
-  Move *moves;
+  //Move *moves;
   UInt16 numMoves;
 } aGame;
 
 //Preferences must include:
 //An Array of type Move of moves
-//A number of moves performed (moveCount)
-//A Board (with all the board settings)
+//An aGame structure (with all the board settings)
 //An Array of Squares that fill the board.
 
 //Begin GLobal Variables
@@ -128,7 +132,7 @@ static struct {
 } DeviceSettings;
 //End Global Variables
 
-
+/*
 static void MovePushMove(aGame *g, Move m) {
   MemHandle h = MemPtrRecoverHandle(g->moves);
   if (g->numMoves >= (MemHandleSize(h) / sizeof(Move))) {
@@ -164,7 +168,7 @@ static void MoveGetMove(aGame *g, Move *m, UInt16 pos) {
   }
   *m = g->moves[pos];
 }
-
+*/
 static UInt16 RandomNum(UInt16 n) {
   //this is ghetto, but fixes divide by zero issues should they arise.
 
@@ -204,8 +208,15 @@ static Board MakeBoard(UInt8 width, UInt8 height, Boolean squarePieces) {
 		     DeviceSettings.ScreenHeader -
 		     (b.squareHeight * b.g.height)) /2) +
 		   DeviceSettings.ScreenHeader);
+  b.rect.extent.x = ((DeviceSettings.ScreenWidth - 
+		      b.rect.topLeft.x));
+  b.rect.extent.y = ((DeviceSettings.ScreenHeight -
+		      b.rect.topLeft.y) +
+		     DeviceSettings.ScreenHeader);
+  
   b.size = width * height;
   b.g.board = MemHandleLock(MemHandleNew(sizeof(Square) * b.size));
+  MemSet(b.g.board, (b.size * sizeof(Square)), 0x00);
   for (i = 0; i < b.size; i++) {
     //Sets the bit in b.g.board[i] to make it a usable part of the board
     b.g.board[i].onBoard = 1;
@@ -265,25 +276,76 @@ static void FillBoardRandom(GameSettings *g) {
 }
 static aGame GetSavedGame() {
   aGame ag;
-  UInt16 gSize = sizeof(ag);
-  /*
-  if (PrefGetAppPreferences(TessCreatorID, TessPrefID, &g,
-			    &gSize, true) != noPreferenceFound) {
+  Boolean unsaved = false;
+  UInt16 agSize = sizeof(ag), boardSize, movesSize;
+  //Forcing never loading the preferences
+  if (true &&
+      (PrefGetAppPreferences(TessCreatorID, Pref_aGameStruct,
+			     &ag, &agSize,
+			     unsaved) != noPreferenceFound)) {
+    boardSize = (ag.theBoard.size * sizeof(Square));
+    ag.theBoard.g.board = MemHandleLock(MemHandleNew(boardSize));
+    MemSet(ag.theBoard.g.board, boardSize, 0x00);
+    if (PrefGetAppPreferences(TessCreatorID, Pref_SquaresArray,
+			      ag.theBoard.g.board, &boardSize,
+			      unsaved) != noPreferenceFound) {
+      
+      //movesSize = sizeof(ag.numMoves * sizeof(Move)) + 1;
+      //ag.moves = MemHandleLock(MemHandleNew(movesSize));
+      //if (PrefGetAppPreferences(TessCreatorID, Pref_MovesArray,
+      //			&ag.moves, &movesSize,
+      //			unsaved) != noPreferenceFound) {
+      return ag;
+      //}
+      //Insert the proper unlocks so that there is no memory leak;
+      //MemHandleUnlock(MemPtrRecoverHandle(ag.moves));
+    }
+    MemHandleUnlock(MemPtrRecoverHandle(ag.theBoard.g.board));
   }
-  else {
-  */
-    // No preferences exist yet, so set the defaults
-    ag.theBoard = MakeBoard(8, 8, true);
-    ag.theBoard.g.skillLevel = difficultyEasy;
-    ag.theBoard.g.showPossible = true;
-    ag.theBoard.pieceSelected = -1;
-    ag.theBoard.blinkRate = SysTicksPerSecond() / 2;
-    ag.theBoard.blinking = false;
-    ag.theBoard.blinkOn = false;
-    
-    FillBoardRandom(&ag.theBoard.g);
   
+  MemSet(&ag, agSize, 0x00);
+
+  // No preferences exist yet, so set the defaults
+  ag.theBoard = MakeBoard(8, 8, true);
+  ag.theBoard.g.skillLevel = difficultyEasy;
+  ag.theBoard.g.showPossible = true;
+  ag.theBoard.pieceSelected = -1;
+  ag.theBoard.blinkRate = SysTicksPerSecond() / 2;
+  ag.theBoard.blinking = false;
+  ag.theBoard.blinkOn = false;
+  
+  FillBoardRandom(&ag.theBoard.g);
+  //ag.moves = MemHandleLock(MemHandleNew(8 * sizeof(Move)));
+  //MemSet(ag.moves, (8 * sizeof(Move)), 0x00);
+
   return ag;
+}
+static void StoreSavedGame(aGame ag) {
+  Boolean unsaved = false;
+  UInt16 agSize = sizeof(ag), boardSize, movesSize;
+  MemHandle h1, h2;
+
+  PrefSetAppPreferences(TessCreatorID, Pref_aGameStruct,
+			TessPrefVers, &ag,
+			agSize, unsaved);
+  boardSize = ag.theBoard.size * sizeof(Square);
+  PrefSetAppPreferences(TessCreatorID, Pref_SquaresArray,
+			TessPrefVers, ag.theBoard.g.board,
+			boardSize, unsaved);
+//movesSize = sizeof(ag.numMoves * sizeof(Move));
+//PrefSetAppPreferences(TessCreatorID, Pref_MovesArray,
+//		TessPrefVers, &ag.moves,
+//		movesSize, unsaved);
+//if (ag.moves) {
+//  h1 = MemPtrRecoverHandle(ag.moves);
+//if (h1)
+//  MemHandleUnlock(h1);
+//  }
+  if (ag.theBoard.g.board) {
+    h2 = MemPtrRecoverHandle(ag.theBoard.g.board);
+    if (h2)
+      MemHandleUnlock(h2);
+  }
 }
 
 static Int16 GetIndex(Board *b, UInt8 x, UInt8 y) {
@@ -332,13 +394,13 @@ static UInt16 ScreenCoordToBoardIndex(Board *b, Coord x, Coord y) {
 //Was more useful when I used a handle for the board within board,
 //but now its just a static array.
 static void FreeBoard(Board *b) {
-  if (b->size) {
-    if (MemPtrRecoverHandle(b->g.board)) {
+  //if (b->size) {
+    //if (MemPtrRecoverHandle(b->g.board)) {
       MemHandleFree(MemPtrRecoverHandle(b->g.board));
       //Clear any other contents so it won't be used again.
-      MemSet(b, sizeof(Board), 0x00);
-    }
-  }
+      //MemSet(b, sizeof(Board), 0x00);
+      //}
+      //}
 }
 
 
@@ -380,6 +442,9 @@ static void DrawSquareInRect(RectangleType r) {
   r.extent.y  -= (j * 2) -1;
   WinDrawRectangleFrame(frame, &r);
 }
+//This could be a billion times faster if I had a window setup for each
+//of the different tiles and then copied them in rather than drawing each
+//one on it's own.
 static void DrawOneSquare(Board *b, PointType p, Square s) {
   RectangleType color, r;
   IndexedColorType oldBGIndex;
@@ -452,6 +517,9 @@ static void DrawSquares(Board *b) {
   FrameType frame = rectangleFrame;
   Int16 i, j;
   RectangleType r;
+  //UInt32 TotalSeconds = 2, TicksPerSec = SysTicksPerSecond();
+  //Int32 delay = (((TotalSeconds * TicksPerSec) / b->size) - );
+  //Int32 delay = (SysTicksPerSecond() / 50);
   
   //If these extents were one less we wouldn't get that cool shadow effect.
   b->rect.extent.x = (b->squareWidth+1) * b->g.width;
@@ -461,12 +529,14 @@ static void DrawSquares(Board *b) {
 
   r.extent.x = b->squareWidth;
   r.extent.y = b->squareHeight;
+  for (j = b->g.height -1; j >= 0; j--) {
+    //Set the vertical position
+    r.topLeft.y = b->rect.topLeft.y + (j * (b->squareHeight + 1));
     for (i = 0; i < b->g.width; i++) {
-    //Set the horizontal position
-    r.topLeft.x = b->rect.topLeft.x + (i * (b->squareWidth + 1));
-    for (j = 0; j < b->g.height; j++) {
-      //Set the vertical position
-      r.topLeft.y = b->rect.topLeft.y + (j * (b->squareHeight + 1));
+      //Set the horizontal position
+      r.topLeft.x = b->rect.topLeft.x + (i * (b->squareWidth + 1));
+      //For Delay, if desired.
+      //SysTaskDelay(delay);
       WinDrawRectangleFrame(frame, &r);
       if (b->g.board[GetIndex(b, i, j)].onBoard) {
 	DrawOneSquare(b, r.topLeft, b->g.board[GetIndex(b, i, j)]);
@@ -564,8 +634,9 @@ static Boolean move(Board *b, UInt16 src, UInt16 dest) {
   return false;
 }
 static void newGame() {
-  Game = GetSavedGame();
-  //bb = MakeBoard(Game.width, Game.height, Game.squarePieces);
+  //Game = GetSavedGame();
+  Game.theBoard = MakeBoard(Game.theBoard.g.width, Game.theBoard.g.height,
+		 Game.theBoard.g.squarePieces);
   Game.theBoard.pieceSelected = -1;
   Game.theBoard.blinkRate = SysTicksPerSecond() / 2;
   Game.theBoard.blinking = false;
@@ -673,11 +744,10 @@ static Err StartApplication(UInt16 launchFlags) {
 
 
 static void StopApplication(void) {
-  
-  //DmCloseDatabase(TessDB);
-  PrefSetAppPreferences(TessCreatorID, TessPrefID, TessPrefVersionNumber,
-			&Game, sizeof(Game), true);
+  StoreSavedGame(Game);
+  //This isn't needed, StoreSavedGame unlocks the necessary handles
   FreeBoard(&Game.theBoard);
+  //DmCloseDatabase(TessDB);
   if (DeviceSettings.RomVersion >= RomOS35)
     WinPopDrawState();
   FrmCloseAllForms();
