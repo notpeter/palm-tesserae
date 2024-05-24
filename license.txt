@@ -1,10 +1,24 @@
-Tesserae, Copyright (C) 2002-2004 Peter Tripp
+This is free and unencumbered software released into the public domain.
 
-This software is in the public domain.
-You may use and abuse it as you see fit.
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
 
-As such, this product comes with no warranty. Of any sort. No really, I ain't foolin -- if you break you palm because of my app (which shouldn't happen) it's not my fault.
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
 
-Although I'm not requiring you to do this, I would appreciate that if you find any bugs, make any modifications or release software based on the code of this you would drop me an email (petree@poboxes.com) or an AIM (fruhead98) or an ICQ (8080288).  I wrote this with the intention of cleaning it up and releasing it as shareware, which I still may do, but seeing as I have spent only a couple hours working on it in the alst few years I figured I might as well release this to the public in a rough form.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
 
-Have fun!
+For more information, please refer to <http://unlicense.org/>
